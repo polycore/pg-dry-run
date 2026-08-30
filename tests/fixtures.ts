@@ -142,6 +142,12 @@ export async function harness(
   options: { readonly maxRows?: number; readonly now?: () => Date } = {},
 ): Promise<Harness> {
   const db = await PGlite.create();
+  // PGlite inherits the host timezone, so a `timestamptz` renders differently
+  // depending on where the suite runs: the same instant comes back as
+  // `2020-01-01 00:00:00+00` in CI and `2020-01-01 03:00:00+03` on a laptop in
+  // Istanbul. Pin the session so the text round trip these tests assert on is
+  // the same everywhere.
+  await db.exec(`SET TimeZone = 'UTC';`);
   await db.exec(SCHEMA);
   await db.exec(SEED);
 

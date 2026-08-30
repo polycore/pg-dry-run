@@ -1,0 +1,94 @@
+# Release
+#
+# Driven by Changesets. One workflow, two modes, gated automatically by whether
+# the repo currently has unconsumed changeset files in `.changeset/*.md`:
+#
+#   1. PRs to `main` add changesets. After they merge:
+#        → If new changesets exist, the action opens or updates a
+#          "chore: version packages" PR that bumps `package.json`, regenerates
+#          `CHANGELOG.md`, removes the consumed `.changeset/*.md` files, and
+#          refreshes `pnpm-lock.yaml`.
+#   2. When that PR merges:
+#        → No changesets are left, so the action runs `pnpm changeset:publish`,
+#          which publishes to npm and creates the `pgpreview@X.Y.Z` git tag.
+#
+# Humans never type a version number; the bump type comes from the changeset
+# markdown each PR carries.
+#
+# Publishing lives in this workflow rather than in a separate tag-triggered one
+# on purpose. The default GITHUB_TOKEN cannot trigger other workflows, so a
+# split would need a personal access token just to make the tag fire the
+# publish. One package with one publish target does not need that hop, and not
+# needing a long-lived PAT is worth more than the separation.
+#
+# The one thing this costs: a PR opened by GITHUB_TOKEN does not trigger CI on
+# itself, so the "chore: version packages" PR shows no checks. That PR only
+# touches package.json, CHANGELOG.md, and the changeset files, and `verify`
+# runs below before anything is published. If branch protection is ever set to
+# require checks before merge, swap GITHUB_TOKEN for a GitHub App token or a
+# fine-grained PAT so that PR gets its own CI run.
+#
+# `id-token: write` is what lets npm attach a provenance attestation, which
+# `publishConfig.provenance` asks for. It ties the published tarball to this
+# workflow run and this commit.
+#
+# Required repo secret: NPM_TOKEN — an npm automation token with publish rights
+# on `pgpreview`.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release:
+    name: Open/update the Version PR · publish on merge
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Publishing an untested build is how a broken release happens. The suite
+      # is hermetic and takes seconds, so gate on it here too rather than
+      # trusting that CI already ran on the merged commit.
+      - name: Verify
+        run: pnpm verify
+
+      - name: Create the Version PR or publish
+        uses: changesets/action@v1
+        with:
+          version: pnpm changeset:version
+          publish: pnpm changeset:publish
+          commit: "chore: version packages"
+          title: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"

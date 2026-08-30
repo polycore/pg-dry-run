@@ -56,8 +56,8 @@ While the package is pre-1.0:
 - `minor` for a feature, a behaviour change, or anything breaking;
 - `patch` for a fix that changes no interface.
 
-On merge, CI opens a `chore: version packages` PR. Merging that PR tags the
-release and publishes to npm.
+On merge, CI opens a `chore: version packages` PR. Merging that PR publishes to
+npm and tags the release.
 
 ## Tests
 

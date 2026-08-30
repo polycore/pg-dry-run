@@ -57,6 +57,10 @@ looks correct, so they approve, and it hits fourteen rows because the CI bot
 also has an `@acme.com` address. The information that would have saved them is
 in the data, not the statement.
 
+Both are the same mistake: gating on the request. What a statement will do is a
+property of the data it runs against, so the only way to gate on the effect is
+to go and find out.
+
 ## How
 
 **1. The mutation is rewritten into a read.** The statement is parsed with
@@ -157,6 +161,29 @@ if (await yourApprovalFlow(proposal)) await pg.apply(proposal);
 
 A `Proposal` is plain JSON with no methods, so it survives a trip through a
 queue, a database row, or a Slack round trip and applies in a different process.
+
+That boundary is deliberate, but it is worth being explicit about what sits on
+your side of it. Running this against a production database with an agent
+attached also means:
+
+- **Someone other than the caller approves.** A second approver needs an
+  identity the caller cannot assume.
+- **The approval leaves the terminal.** The people who should sign off on a
+  production write are not tailing your process output.
+- **The log is not written by the thing being audited.** An audit trail the
+  caller appends to is not an audit trail.
+- **Environments route differently.** Staging should not have to clear the bar
+  production does.
+- **The connection string is not on a laptop.** A credential should not be held
+  by the process asking to use it.
+
+None of those are Postgres problems, so none of them are in this library.
+
+[Polycore](https://polycore.ai) is where we build them: governed production
+access for agents and humans, with the approval, the identity, and the audit log
+around it, and credentials that stay inside your own infrastructure. pgpreview
+is the piece that answers what a write would actually do, and it is open source
+because that question is worth answering whether or not you use the rest.
 
 ## One connection string is enough
 
@@ -261,3 +288,9 @@ to set up. See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+---
+
+Built and maintained by [Polycore](https://polycore.ai), which does governed
+production access for agents and humans. If you want the approval flow, the
+identity, and the audit log around this, that is what we make.

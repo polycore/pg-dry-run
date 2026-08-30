@@ -6,7 +6,7 @@ Please do not open a public issue.
 
 Report privately through
 [GitHub Security Advisories](https://github.com/polycore/pgpreview/security/advisories/new),
-or email <security@polycore.ai>. We will acknowledge within three working days
+or email <support@polycore.ai>. We will acknowledge within three working days
 and keep you updated until it is resolved.
 
 ## Scope

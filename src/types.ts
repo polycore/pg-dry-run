@@ -44,11 +44,7 @@ export interface RowChange {
 }
 
 export type ReferentialAction =
-  | "cascade"
-  | "set null"
-  | "set default"
-  | "restrict"
-  | "no action";
+  "cascade" | "set null" | "set default" | "restrict" | "no action";
 
 /** A foreign key reachable from the target, discovered from the catalog. */
 export interface CascadeNode {
