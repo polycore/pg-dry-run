@@ -21,7 +21,7 @@ import {
 import { keyAlias } from "./derive.js";
 import type { Row, Sql } from "./driver.js";
 import {
-  PgPreviewError,
+  PgDryRunError,
   TooManyRowsError,
   UnsupportedStatementError,
 } from "./errors.js";
@@ -197,7 +197,7 @@ async function evaluate(
   if (derived.sql === undefined) return {};
   const row = (await sql(derived.sql, params))[0];
   if (row === undefined) {
-    throw new PgPreviewError("The derived read returned no row.");
+    throw new PgDryRunError("The derived read returned no row.");
   }
   return row;
 }
@@ -313,7 +313,7 @@ async function defaultNode(column: ColumnMeta): Promise<PgNode | undefined> {
 
   const node = await parseExpression(column.defaultExpr);
   if (node === undefined) {
-    throw new PgPreviewError(
+    throw new PgDryRunError(
       `Could not parse the default of "${column.name}": ${column.defaultExpr}`,
     );
   }

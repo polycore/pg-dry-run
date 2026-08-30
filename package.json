@@ -1,5 +1,5 @@
 {
-  "name": "pgpreview",
+  "name": "pgdryrun",
   "version": "0.0.1",
   "description": "See exactly which rows a Postgres INSERT, UPDATE or DELETE would write, before it runs. Then apply only those rows, and only if none of them have changed.",
   "keywords": [
@@ -14,11 +14,11 @@
     "safety",
     "mcp"
   ],
-  "homepage": "https://github.com/polycore/pgpreview#readme",
-  "bugs": "https://github.com/polycore/pgpreview/issues",
+  "homepage": "https://github.com/polycore/pgdryrun#readme",
+  "bugs": "https://github.com/polycore/pgdryrun/issues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/polycore/pgpreview.git"
+    "url": "git+https://github.com/polycore/pgdryrun.git"
   },
   "license": "MIT",
   "author": "Polycore, Inc. (https://polycore.ai)",

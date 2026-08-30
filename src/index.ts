@@ -21,7 +21,7 @@ export type { Analysis, InsertAnalysis, MutationAnalysis } from "./analyze.js";
 export { analyze } from "./analyze.js";
 export type { Driver, Row, Sql } from "./driver.js";
 export {
-  PgPreviewError,
+  PgDryRunError,
   ProposalExpiredError,
   StateChangedError,
   TooManyRowsError,

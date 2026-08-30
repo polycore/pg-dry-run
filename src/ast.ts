@@ -2,7 +2,7 @@
 
 import { deparse, loadModule, parse } from "pgsql-parser";
 
-import { PgPreviewError } from "./errors.js";
+import { PgDryRunError } from "./errors.js";
 
 /**
  * The one file that touches raw parse trees.
@@ -122,7 +122,7 @@ export async function typeName(type: string): Promise<PgNode> {
   const cast = child(value, "TypeCast");
   const name = child(cast, "typeName");
   if (!name) {
-    throw new PgPreviewError(`Could not resolve the column type "${type}".`);
+    throw new PgDryRunError(`Could not resolve the column type "${type}".`);
   }
   typeNames.set(type, name);
   return name;
@@ -130,7 +130,7 @@ export async function typeName(type: string): Promise<PgNode> {
 
 export async function intLiteral(value: number): Promise<PgNode> {
   const node = await pluckTargetValue(`SELECT ${Math.trunc(value)}`);
-  if (!node) throw new PgPreviewError("Could not build an integer literal.");
+  if (!node) throw new PgDryRunError("Could not build an integer literal.");
   return node;
 }
 
@@ -191,7 +191,7 @@ export async function deparseSelect(shape: SelectShape): Promise<string> {
   const sql: unknown = await deparse(tree);
 
   if (typeof sql !== "string") {
-    throw new PgPreviewError("Could not deparse the derived read.");
+    throw new PgDryRunError("Could not deparse the derived read.");
   }
   return sql;
 }
@@ -220,7 +220,7 @@ export async function deparseTargets(
   };
   const sql: unknown = await deparse(tree);
   if (typeof sql !== "string") {
-    throw new PgPreviewError("Could not deparse the derived read.");
+    throw new PgDryRunError("Could not deparse the derived read.");
   }
   return sql;
 }
@@ -240,7 +240,7 @@ export async function deparseCount(
 
   const sql: unknown = await deparse(tree);
   if (typeof sql !== "string") {
-    throw new PgPreviewError("Could not deparse the count query.");
+    throw new PgDryRunError("Could not deparse the count query.");
   }
   return sql;
 }

@@ -1,5 +1,5 @@
 import type { Row } from "./driver.js";
-import { PgPreviewError } from "./errors.js";
+import { PgDryRunError } from "./errors.js";
 
 /**
  * Narrowing readers for driver rows.
@@ -17,7 +17,7 @@ export function optionalText(row: Row, column: string): string | null {
 export function text(row: Row, column: string): string {
   const value = optionalText(row, column);
   if (value === null) {
-    throw new PgPreviewError(`Expected text in column "${column}".`);
+    throw new PgDryRunError(`Expected text in column "${column}".`);
   }
   return value;
 }
@@ -29,7 +29,7 @@ export function integer(row: Row, column: string): number {
     const parsed = Number(value);
     if (Number.isFinite(parsed)) return parsed;
   }
-  throw new PgPreviewError(`Expected a number in column "${column}".`);
+  throw new PgDryRunError(`Expected a number in column "${column}".`);
 }
 
 /**
@@ -46,7 +46,7 @@ export function textArray(row: Row, column: string): readonly string[] {
     if (inner === "") return [];
     return inner.split(",").map((entry) => entry.replace(/^"|"$/g, ""));
   }
-  throw new PgPreviewError(`Expected a text array in column "${column}".`);
+  throw new PgDryRunError(`Expected a text array in column "${column}".`);
 }
 
 export function boolean(row: Row, column: string): boolean {
@@ -54,5 +54,5 @@ export function boolean(row: Row, column: string): boolean {
   if (typeof value === "boolean") return value;
   if (value === "t" || value === "true") return true;
   if (value === "f" || value === "false") return false;
-  throw new PgPreviewError(`Expected a boolean in column "${column}".`);
+  throw new PgDryRunError(`Expected a boolean in column "${column}".`);
 }

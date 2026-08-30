@@ -1,7 +1,7 @@
 import { defineConfig } from "vitest/config";
 
 /**
- * pgpreview tests run against real PostgreSQL semantics via PGlite (Postgres
+ * pgdryrun tests run against real PostgreSQL semantics via PGlite (Postgres
  * compiled to WASM), in-process and hermetic: no server, no container, no
  * fixtures on disk. That matters because the guarantees under test are
  * Postgres behaviours, not our own: `xmin` changing on every row version,

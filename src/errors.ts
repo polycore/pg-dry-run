@@ -1,7 +1,7 @@
 import type { DriftedRow } from "./types.js";
 
-export class PgPreviewError extends Error {
-  public override readonly name: string = "PgPreviewError";
+export class PgDryRunError extends Error {
+  public override readonly name: string = "PgDryRunError";
 }
 
 export type UnsupportedReason =
@@ -18,7 +18,7 @@ export type UnsupportedReason =
  * The statement cannot be previewed faithfully. Refusing is deliberate: an
  * approximate diff is worse than no diff, because it manufactures confidence.
  */
-export class UnsupportedStatementError extends PgPreviewError {
+export class UnsupportedStatementError extends PgDryRunError {
   public override readonly name = "UnsupportedStatementError";
   constructor(
     public readonly reason: UnsupportedReason,
@@ -36,7 +36,7 @@ export class UnsupportedStatementError extends PgPreviewError {
  * limit the operation is no longer a one-off decision a human can review; it
  * belongs in a reviewed, named migration or action.
  */
-export class TooManyRowsError extends PgPreviewError {
+export class TooManyRowsError extends PgDryRunError {
   public override readonly name = "TooManyRowsError";
   constructor(
     public readonly rowCount: number,
@@ -49,7 +49,7 @@ export class TooManyRowsError extends PgPreviewError {
   }
 }
 
-export class ProposalExpiredError extends PgPreviewError {
+export class ProposalExpiredError extends PgDryRunError {
   public override readonly name = "ProposalExpiredError";
   constructor(
     public readonly proposalId: string,
@@ -65,7 +65,7 @@ export class ProposalExpiredError extends PgPreviewError {
  * At least one previewed row changed before apply. Nothing was written: the
  * apply runs in a single transaction and is rolled back whole.
  */
-export class StateChangedError extends PgPreviewError {
+export class StateChangedError extends PgDryRunError {
   public override readonly name = "StateChangedError";
   constructor(
     public readonly proposalId: string,

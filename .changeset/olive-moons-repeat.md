@@ -1,5 +1,5 @@
 ---
-"pgpreview": minor
+"pgdryrun": minor
 ---
 
 Close three gaps where the library could be wrong without saying so.

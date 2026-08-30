@@ -3,7 +3,7 @@
   "changelog": [
     "./changelog.cjs",
     {
-      "repo": "polycore/pgpreview"
+      "repo": "polycore/pgdryrun"
     }
   ],
   "commit": false,

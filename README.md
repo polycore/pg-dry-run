@@ -1,19 +1,19 @@
-# pgpreview
+# pgdryrun
 
-[![CI](https://github.com/polycore/pgpreview/actions/workflows/ci.yml/badge.svg)](https://github.com/polycore/pgpreview/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/pgpreview.svg)](https://www.npmjs.com/package/pgpreview)
-[![license](https://img.shields.io/npm/l/pgpreview.svg)](LICENSE)
+[![CI](https://github.com/polycore/pgdryrun/actions/workflows/ci.yml/badge.svg)](https://github.com/polycore/pgdryrun/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/pgdryrun.svg)](https://www.npmjs.com/package/pgdryrun)
+[![license](https://img.shields.io/npm/l/pgdryrun.svg)](LICENSE)
 
 See exactly which rows a Postgres `INSERT`, `UPDATE` or `DELETE` would write,
 before it runs. Then apply only those rows, and only if none of them have
 changed since.
 
 ```sh
-npm install pgpreview
+npm install pgdryrun
 ```
 
 ```ts
-import { createPreviewer } from "pgpreview";
+import { createPreviewer } from "pgdryrun";
 
 const pg = createPreviewer({ url: process.env.DATABASE_URL });
 
@@ -151,7 +151,7 @@ Two properties follow from the mechanism rather than from a rule:
 
 ## Approval is yours
 
-pgpreview produces the artifact you approve. It does not own the workflow, the
+pgdryrun produces the artifact you approve. It does not own the workflow, the
 identity, or the transport:
 
 ```ts
@@ -181,7 +181,7 @@ None of those are Postgres problems, so none of them are in this library.
 
 [Polycore](https://polycore.ai) is where we build them: governed production
 access for agents and humans, with the approval, the identity, and the audit log
-around it, and credentials that stay inside your own infrastructure. pgpreview
+around it, and credentials that stay inside your own infrastructure. pgdryrun
 is the piece that answers what a write would actually do, and it is open source
 because that question is worth answering whether or not you use the rest.
 
@@ -280,7 +280,7 @@ apply touched. For an insert those are the only way to learn a key the database
 generated.
 
 Errors: `UnsupportedStatementError`, `TooManyRowsError`, `ProposalExpiredError`,
-`StateChangedError`, all extending `PgPreviewError`.
+`StateChangedError`, all extending `PgDryRunError`.
 
 Bring your own connection by implementing `Driver`, which needs one thing:
 exclusive use of a session, so a transaction's statements share a connection.

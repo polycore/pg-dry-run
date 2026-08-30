@@ -1,10 +1,10 @@
 ---
-"pgpreview": minor
+"pgdryrun": minor
 ---
 
 First release.
 
-`pgpreview` derives a read-only preview of what a Postgres `INSERT`, `UPDATE` or
+`pgdryrun` derives a read-only preview of what a Postgres `INSERT`, `UPDATE` or
 `DELETE` would write, then applies only the previewed rows and only if none of
 them have moved since.
 
@@ -27,5 +27,9 @@ approximated, since a wrong diff manufactures confidence. The refusal list and
 the known limitations are in the README.
 
 This is the standalone extraction of the package previously published as
-`@polycore/pgpreview`. The public API is unchanged; the package is now built to
-`dist/` so it can be consumed from plain Node rather than only through a bundler.
+`@polycore/pgpreview`, renamed because npm treats `pgpreview` as too close to an
+existing `pg-preview` placeholder. The API is unchanged apart from the base error
+class, which is now `PgDryRunError`; it names the package rather than the preview
+step, since every error extends it including the apply-time ones. The package is
+also built to `dist/` now, so it can be consumed from plain Node rather than only
+through a bundler.

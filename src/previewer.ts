@@ -23,7 +23,7 @@ import {
 } from "./derive.js";
 import type { Driver, Row, Sql } from "./driver.js";
 import {
-  PgPreviewError,
+  PgDryRunError,
   ProposalExpiredError,
   StateChangedError,
   TooManyRowsError,
@@ -118,7 +118,7 @@ export function createPreviewer(options: PreviewerOptions): Previewer {
   let writeDriver = options.driver;
   if (!writeDriver) {
     if (options.url === undefined) {
-      throw new PgPreviewError(
+      throw new PgDryRunError(
         "createPreviewer needs either a `url` or a `driver`.",
       );
     }
@@ -277,7 +277,7 @@ export function createPreviewer(options: PreviewerOptions): Previewer {
             // An insert names no existing row, so a short count is not drift:
             // the rows it was told to write are the rows it wrote, or it threw.
             if (proposal.kind === "insert") {
-              throw new PgPreviewError(
+              throw new PgDryRunError(
                 `Insert wrote ${returned.length} of ${proposal.changes.length} ` +
                   `previewed row(s). Nothing was applied.`,
               );

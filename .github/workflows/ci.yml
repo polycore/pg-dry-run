@@ -96,7 +96,7 @@ jobs:
 
       - name: Test
         env:
-          PGPREVIEW_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres
+          PGDRYRUN_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres
         run: pnpm test
 
   # The published artifact is what users actually get, and it is not what the
@@ -134,9 +134,9 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/consumer && cd /tmp/consumer
           echo '{"name":"consumer","type":"module","private":true}' > package.json
-          npm install /tmp/pgpreview-*.tgz
+          npm install /tmp/pgdryrun-*.tgz
           cat > check.mjs <<'JS'
-          import { createPreviewer, PgPreviewError } from "pgpreview";
+          import { createPreviewer, PgDryRunError } from "pgdryrun";
           if (typeof createPreviewer !== "function") {
             throw new Error("createPreviewer is not exported");
           }
@@ -144,7 +144,7 @@ jobs:
             createPreviewer({});
             throw new Error("expected a guard on missing url/driver");
           } catch (error) {
-            if (!(error instanceof PgPreviewError)) throw error;
+            if (!(error instanceof PgDryRunError)) throw error;
           }
           console.log("packed tarball imports and runs from plain Node");
           JS
