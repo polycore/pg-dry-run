@@ -84,6 +84,38 @@ CREATE TABLE widgets (
   total    numeric(12,2) GENERATED ALWAYS AS (qty * price) STORED
 );
 
+-- A composite foreign key, which the cascade walk counts by tuple and so
+-- cannot follow. Present to prove it is reported rather than skipped in
+-- silence: memberships has the composite primary key it points at.
+CREATE TABLE membership_notes (
+  id           bigserial PRIMARY KEY,
+  workspace_id text,
+  user_id      uuid,
+  note         text NOT NULL,
+  CONSTRAINT membership_notes_membership_fkey
+    FOREIGN KEY (workspace_id, user_id)
+    REFERENCES memberships (workspace_id, user_id) ON DELETE CASCADE
+);
+
+-- A cascade chain long enough to run past a lowered depth limit, so the depth
+-- cutoff has something to stop at: workspaces -> chain_a -> b -> c -> d.
+CREATE TABLE chain_a (
+  id           bigserial PRIMARY KEY,
+  workspace_id text REFERENCES workspaces(id) ON DELETE CASCADE
+);
+CREATE TABLE chain_b (
+  id bigserial PRIMARY KEY,
+  a_id bigint REFERENCES chain_a(id) ON DELETE CASCADE
+);
+CREATE TABLE chain_c (
+  id bigserial PRIMARY KEY,
+  b_id bigint REFERENCES chain_b(id) ON DELETE CASCADE
+);
+CREATE TABLE chain_d (
+  id bigserial PRIMARY KEY,
+  c_id bigint REFERENCES chain_c(id) ON DELETE CASCADE
+);
+
 CREATE FUNCTION touch_updated_at() RETURNS trigger AS $$
 BEGIN NEW.updated_at := now(); RETURN NEW; END $$ LANGUAGE plpgsql;
 
@@ -128,6 +160,14 @@ INSERT INTO invoices (workspace_id, cents) VALUES ('ws_002', 4900);
 INSERT INTO memberships (workspace_id, user_id, role)
   SELECT 'ws_881', id, 'member' FROM profiles WHERE email LIKE '%@acme.com';
 
+INSERT INTO membership_notes (workspace_id, user_id, note)
+  SELECT 'ws_881', id, 'onboarded' FROM profiles WHERE email LIKE '%@acme.com';
+
+INSERT INTO chain_a (workspace_id) VALUES ('ws_881');
+INSERT INTO chain_b (a_id) SELECT id FROM chain_a;
+INSERT INTO chain_c (b_id) SELECT id FROM chain_b;
+INSERT INTO chain_d (c_id) SELECT id FROM chain_c;
+
 INSERT INTO ops.tickets (title) VALUES ('printer on fire'), ('coffee machine');
 `;
 
@@ -139,7 +179,11 @@ export interface Harness {
 }
 
 export async function harness(
-  options: { readonly maxRows?: number; readonly now?: () => Date } = {},
+  options: {
+    readonly maxRows?: number;
+    readonly now?: () => Date;
+    readonly cascadeDepth?: number;
+  } = {},
 ): Promise<Harness> {
   const db = await PGlite.create();
   // PGlite inherits the host timezone, so a `timestamptz` renders differently
@@ -155,6 +199,9 @@ export async function harness(
     driver: pgliteDriver(db),
     ...(options.maxRows === undefined ? {} : { maxRows: options.maxRows }),
     ...(options.now === undefined ? {} : { now: options.now }),
+    ...(options.cascadeDepth === undefined
+      ? {}
+      : { cascadeDepth: options.cascadeDepth }),
   });
 
   return {
@@ -162,8 +209,9 @@ export async function harness(
     pg,
     async reset() {
       await db.exec(`
-        TRUNCATE memberships, invoices, api_keys, sessions, profiles,
-                 workspaces, audit_log, widgets, keyless, notes, ops.tickets
+        TRUNCATE membership_notes, memberships, invoices, api_keys, sessions,
+                 profiles, workspaces, audit_log, widgets, keyless, notes,
+                 chain_d, chain_c, chain_b, chain_a, ops.tickets
           RESTART IDENTITY CASCADE;
       `);
       await db.exec(SEED);

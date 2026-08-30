@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { analyze } from "./analyze.js";
 import { walkCascade } from "./cascade.js";
 import {
+  assertTypeName,
   columnTypes,
   labelColumn,
   primaryKeyColumns,
@@ -439,6 +440,12 @@ function keyTuples(keyColumns: readonly string[], rowCount: number): string {
  * Every value crosses as text and is cast back with the column's catalog type,
  * so PostgreSQL's own input function reconstructs it. Keys and `xmin` compare as
  * text, which works for any key type without special cases.
+ *
+ * Column names go through `quoteIdent` and every value is a parameter, but the
+ * cast target is a bare type name spliced into the statement, so it is checked
+ * here as well as when the catalog produced it. A `Proposal` is plain JSON that
+ * may have crossed a queue or a database row since, and this is the one field
+ * on it that reaches SQL uninterpolated.
  */
 function buildApply(proposal: Proposal): {
   text: string;
@@ -492,7 +499,8 @@ function buildApply(proposal: Proposal): {
 
   const assignments = columns
     .map(
-      (column, i) => `${quoteIdent(column.column)} = v.a${i}::${column.type}`,
+      (column, i) =>
+        `${quoteIdent(column.column)} = v.a${i}::${assertTypeName(column.type)}`,
     )
     .join(", ");
 

@@ -136,3 +136,73 @@ describe("cascade", () => {
     expect(find(p.cascades, "nodes")).toMatchObject({ rowCount: 1 });
   });
 });
+
+/**
+ * What the walk cannot follow, it has to say out loud. A truncated count reads
+ * exactly like a complete one, and a delete preview that under-reports its own
+ * reach is the failure this library exists to prevent.
+ */
+describe("the walk reports where it stopped", () => {
+  it("names a composite foreign key instead of skipping it", async () => {
+    const p = await h.pg.propose("DELETE FROM memberships WHERE role = $1", [
+      "member",
+    ]);
+
+    const warning = p.warnings.find(
+      (w) => w.code === "composite_foreign_key_skipped",
+    );
+    expect(warning).toBeDefined();
+    expect(warning?.message).toContain("membership_notes");
+    expect(warning?.message).toContain("membership_notes_membership_fkey");
+    // The columns of the key, so the reader can go look at the rows themselves.
+    expect(warning?.message).toContain("workspace_id");
+    expect(warning?.message).toContain("user_id");
+
+    // It is named rather than counted: following it needs a tuple match.
+    expect(p.cascades.some((c) => c.table.name === "membership_notes")).toBe(
+      false,
+    );
+  });
+
+  it("warns when the depth limit stops the descent", async () => {
+    const shallow = await harness({ cascadeDepth: 1 });
+    try {
+      const p = await shallow.pg.propose(
+        "DELETE FROM workspaces WHERE id = $1",
+        ["ws_881"],
+      );
+
+      // chain_a is depth 0 and chain_b depth 1, both inside the limit.
+      expect(p.cascades.some((c) => c.table.name === "chain_a")).toBe(true);
+      expect(p.cascades.some((c) => c.table.name === "chain_b")).toBe(true);
+      // chain_c is past it, so it is absent from the counts...
+      expect(p.cascades.some((c) => c.table.name === "chain_c")).toBe(false);
+
+      // ...and the proposal says so rather than reading as complete.
+      const warning = p.warnings.find(
+        (w) =>
+          w.code === "cascade_depth_truncated" &&
+          w.message.includes("cascade depth limit"),
+      );
+      expect(warning).toBeDefined();
+      expect(warning?.message).toContain("chain_b");
+    } finally {
+      await shallow.close();
+    }
+  });
+
+  it("does not warn about depth when the whole graph fits", async () => {
+    const p = await h.pg.propose("DELETE FROM workspaces WHERE id = $1", [
+      "ws_881",
+    ]);
+    expect(
+      p.warnings.some(
+        (w) =>
+          w.code === "cascade_depth_truncated" &&
+          w.message.includes("cascade depth limit"),
+      ),
+    ).toBe(false);
+    // The default limit of 5 reaches the end of the chain.
+    expect(p.cascades.some((c) => c.table.name === "chain_d")).toBe(true);
+  });
+});

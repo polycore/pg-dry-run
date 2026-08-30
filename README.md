@@ -248,6 +248,12 @@ Stated here rather than discovered later:
   insert falls through to, so a `created_at DEFAULT now()` carries the moment
   the preview ran rather than the moment it was approved. Reported as a
   `default_evaluated` warning.
+- **Cascade reach is followed one column at a time.** A multi-column foreign
+  key needs a tuple match the walk cannot express, so rows reachable through one
+  are named in a `composite_foreign_key_skipped` warning rather than counted.
+  The same goes for anything past `cascadeDepth`, which reports
+  `cascade_depth_truncated`. A truncated count is never presented as a complete
+  one.
 - **`xmin` and `VACUUM FREEZE`.** Freezing rewrites `xmin` without changing
   data, which would reject a valid apply. Wrong in the harmless direction, and
   irrelevant at proposal lifetimes.

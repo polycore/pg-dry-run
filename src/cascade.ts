@@ -44,10 +44,19 @@ export async function walkCascade(
 ): Promise<CascadeResult> {
   const nodes: CascadeNode[] = [];
   const warnings: Warning[] = [];
+  // One warning per constraint and per stopping point, however many levels of
+  // the walk arrive at the same place.
+  const reported = new Set<string>();
 
   await descend(relation, rootValues, 0, new Set([relation.oid]));
 
   return { nodes, warnings };
+
+  function warnOnce(key: string, warning: Warning): void {
+    if (reported.has(key)) return;
+    reported.add(key);
+    warnings.push(warning);
+  }
 
   async function descend(
     parent: Relation,
@@ -55,9 +64,36 @@ export async function walkCascade(
     depth: number,
     path: ReadonlySet<number>,
   ): Promise<void> {
-    if (depth > options.maxDepth) return;
+    // A truncated count reads exactly like a complete one, so stopping has to
+    // say so. The breadth cutoff below already did; this is the depth cutoff.
+    if (depth > options.maxDepth) {
+      warnOnce(`depth:${parent.oid}`, {
+        code: "cascade_depth_truncated",
+        message:
+          `${qualify(parent.ref)} is ${depth} level(s) from the target, past the ` +
+          `cascade depth limit of ${options.maxDepth}. Tables cascading from it ` +
+          `are not counted.`,
+      });
+      return;
+    }
 
-    for (const fk of await childForeignKeys(sql, parent)) {
+    const { followable, composite } = await childForeignKeys(sql, parent);
+
+    // A tuple match is not expressible as the one-column-against-a-list read
+    // this walk uses, so a composite key is named rather than followed. It used
+    // to be filtered out in SQL, which under-reported the delete's reach with
+    // nothing on the proposal to say so.
+    for (const fk of composite) {
+      warnOnce(`composite:${fk.constraint}`, {
+        code: "composite_foreign_key_skipped",
+        message:
+          `${qualify(fk.child)} references this target through the multi-column ` +
+          `foreign key ${fk.constraint} (${fk.columns.join(", ")}), which this ` +
+          `preview cannot follow. Rows it would reach are not counted.`,
+      });
+    }
+
+    for (const fk of followable) {
       const parentValues = await valuesFor(fk.parentColumn);
       if (parentValues.length === 0) continue;
 

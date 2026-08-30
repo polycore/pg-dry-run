@@ -9,6 +9,7 @@ import {
   typeName,
 } from "./ast.js";
 import {
+  assertTypeName,
   type ColumnMeta,
   columnMeta,
   labelColumn,
@@ -411,7 +412,7 @@ export function buildInsertApply(proposal: Proposal): {
       );
       if (field === undefined) return "DEFAULT";
       params.push(field.after);
-      return `$${params.length}::text::${column.type}`;
+      return `$${params.length}::text::${assertTypeName(column.type)}`;
     });
     return `(${slots.join(", ")})`;
   });

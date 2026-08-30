@@ -1,6 +1,6 @@
 import type { Sql } from "./driver.js";
 import { UnsupportedStatementError } from "./errors.js";
-import { boolean, integer, optionalText, text } from "./row.js";
+import { boolean, integer, optionalText, text, textArray } from "./row.js";
 import type { ReferentialAction, StatementKind, TableRef } from "./types.js";
 
 /** Double-quote an identifier for interpolation into generated SQL. */
@@ -318,11 +318,36 @@ const ACTIONS: Readonly<Record<string, ReferentialAction>> = {
   a: "no action",
 };
 
-/** Single-column foreign keys pointing at this relation. */
+/**
+ * A multi-column foreign key pointing at this relation. The cascade walk
+ * matches one column against a list of values, which cannot express a tuple
+ * match, so these are reported rather than followed.
+ */
+export interface CompositeForeignKey {
+  readonly constraint: string;
+  readonly child: TableRef;
+  readonly columns: readonly string[];
+}
+
+export interface ChildForeignKeys {
+  /** Single-column keys, which the cascade walk can follow. */
+  readonly followable: readonly ChildForeignKey[];
+  /** Multi-column keys, which it cannot. Never silently dropped. */
+  readonly composite: readonly CompositeForeignKey[];
+}
+
+/**
+ * Foreign keys pointing at this relation, split by whether the walk can follow
+ * them.
+ *
+ * Both kinds come back from one query. A composite key used to be filtered out
+ * in SQL, which made a delete preview under-report its own reach with nothing
+ * to show for it; the caller now gets them and warns.
+ */
 export async function childForeignKeys(
   sql: Sql,
   relation: Relation,
-): Promise<readonly ChildForeignKey[]> {
+): Promise<ChildForeignKeys> {
   const rows = await sql(
     `SELECT c.conname                      AS constraint_name,
             n.nspname                      AS schema,
@@ -330,7 +355,12 @@ export async function childForeignKeys(
             cl.oid::int8::int              AS child_oid,
             ca.attname                     AS child_column,
             pa.attname                     AS parent_column,
-            c.confdeltype                  AS action
+            c.confdeltype                  AS action,
+            array_length(c.conkey, 1)      AS arity,
+            (SELECT array_agg(a.attname ORDER BY a.attnum)
+               FROM pg_attribute a
+              WHERE a.attrelid = c.conrelid
+                AND a.attnum = ANY(c.conkey))::text[] AS child_columns
        FROM pg_constraint c
        JOIN pg_class cl ON cl.oid = c.conrelid
        JOIN pg_namespace n ON n.oid = cl.relnamespace
@@ -338,17 +368,32 @@ export async function childForeignKeys(
        JOIN pg_attribute pa ON pa.attrelid = c.confrelid AND pa.attnum = c.confkey[1]
       WHERE c.confrelid = $1
         AND c.contype = 'f'
-        AND array_length(c.conkey, 1) = 1
       ORDER BY cl.relname, c.conname`,
     [relation.oid],
   );
 
-  return rows.map((row) => ({
-    constraint: text(row, "constraint_name"),
-    child: { schema: text(row, "schema"), name: text(row, "name") },
-    childOid: integer(row, "child_oid"),
-    column: text(row, "child_column"),
-    parentColumn: text(row, "parent_column"),
-    action: ACTIONS[text(row, "action")] ?? "no action",
-  }));
+  const followable: ChildForeignKey[] = [];
+  const composite: CompositeForeignKey[] = [];
+
+  for (const row of rows) {
+    const child = { schema: text(row, "schema"), name: text(row, "name") };
+    if (integer(row, "arity") > 1) {
+      composite.push({
+        constraint: text(row, "constraint_name"),
+        child,
+        columns: textArray(row, "child_columns"),
+      });
+      continue;
+    }
+    followable.push({
+      constraint: text(row, "constraint_name"),
+      child,
+      childOid: integer(row, "child_oid"),
+      column: text(row, "child_column"),
+      parentColumn: text(row, "parent_column"),
+      action: ACTIONS[text(row, "action")] ?? "no action",
+    });
+  }
+
+  return { followable, composite };
 }

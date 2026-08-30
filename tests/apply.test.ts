@@ -181,3 +181,67 @@ describe("apply", () => {
     ).toBe(5);
   });
 });
+
+/**
+ * A `Proposal` is plain JSON, and the README encourages sending it through a
+ * queue or a database row on its way to an approver. Everything on it that
+ * reaches SQL does so as a parameter or through `quoteIdent`, with one
+ * exception: the cast target in `plan.assignments[].type` is a bare type name
+ * spliced into the statement. It is checked when the catalog produces it, so it
+ * has to be checked again on the way back in, or a proposal that was edited in
+ * transit writes columns nobody previewed.
+ */
+describe("a proposal that changed in transit", () => {
+  it("refuses a type that smuggles an assignment past the diff", async () => {
+    const p = await h.pg.propose(
+      "UPDATE profiles SET status = $1 WHERE email = $2",
+      ["suspended", "alice@acme.com"],
+    );
+
+    const tampered = JSON.parse(JSON.stringify(p)) as typeof p;
+    // Valid SQL in the cast position, and a second assignment nobody approved.
+    (tampered.plan.assignments[0] as { type: string }).type =
+      "text, email = 'pwned@evil.com'";
+
+    await expect(h.pg.apply(tampered)).rejects.toThrow(
+      /unrecognised type name/i,
+    );
+
+    // The approved change did not land either: it refuses, it does not partly
+    // apply.
+    expect(await statusOf(h.db, "alice@acme.com")).toBe("active");
+    expect(
+      await countWhere(h.db, `FROM profiles WHERE email = 'pwned@evil.com'`),
+    ).toBe(0);
+  });
+
+  it("refuses the same trick on an insert", async () => {
+    const p = await h.pg.propose("INSERT INTO widgets (name) VALUES ($1)", [
+      "sprocket",
+    ]);
+
+    const tampered = JSON.parse(JSON.stringify(p)) as typeof p;
+    const assignment = tampered.plan.assignments.find(
+      (a) => a.column === "name",
+    );
+    (assignment as { type: string }).type = "text), (999, 'injected'";
+
+    await expect(h.pg.apply(tampered)).rejects.toThrow(
+      /unrecognised type name/i,
+    );
+    expect(await countWhere(h.db, `FROM widgets`)).toBe(0);
+  });
+
+  it("still applies a proposal that only made the trip", async () => {
+    const p = await h.pg.propose(
+      "UPDATE profiles SET status = $1 WHERE email = $2",
+      ["suspended", "alice@acme.com"],
+    );
+
+    // The round trip itself has to stay lossless; the check above must not have
+    // made an honest proposal unapplicable.
+    const receipt = await h.pg.apply(JSON.parse(JSON.stringify(p)));
+    expect(receipt.rowsAffected).toBe(1);
+    expect(await statusOf(h.db, "alice@acme.com")).toBe("suspended");
+  });
+});

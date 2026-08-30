@@ -56,6 +56,49 @@ jobs:
       - name: Build
         run: pnpm build
 
+  # PGlite has one backend, so the drift tests in the main suite interleave a
+  # writer sequentially: they prove the mechanism, not the race. This job points
+  # the same library at a real server so a genuinely concurrent writer runs
+  # between the preview and the apply, and so the SELECT-only role path gets
+  # exercised at all (PGlite has no role system).
+  postgres:
+    name: Concurrency and roles against a real Postgres
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Test
+        env:
+          PGPREVIEW_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres
+        run: pnpm test
+
   # The published artifact is what users actually get, and it is not what the
   # test suite exercises. Pack it, install it into a bare project, and import it
   # from plain Node: the failure this catches is a package that only resolves

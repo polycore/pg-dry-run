@@ -69,6 +69,7 @@ export type WarningCode =
   | "unique_column_touched"
   | "restrict_blocks_delete"
   | "cascade_depth_truncated"
+  | "composite_foreign_key_skipped"
   | "deferred_default"
   | "default_evaluated"
   | "missing_required_column";

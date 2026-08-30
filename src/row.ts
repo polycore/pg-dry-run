@@ -32,6 +32,23 @@ export function integer(row: Row, column: string): number {
   throw new PgPreviewError(`Expected a number in column "${column}".`);
 }
 
+/**
+ * A `text[]` column. Drivers disagree on array decoding: postgres.js hands back
+ * a real array, while PGlite may hand back the literal `{a,b}`. Accept both.
+ */
+export function textArray(row: Row, column: string): readonly string[] {
+  const value = row[column];
+  if (Array.isArray(value)) {
+    return value.filter((entry): entry is string => typeof entry === "string");
+  }
+  if (typeof value === "string") {
+    const inner = value.replace(/^\{/, "").replace(/\}$/, "");
+    if (inner === "") return [];
+    return inner.split(",").map((entry) => entry.replace(/^"|"$/g, ""));
+  }
+  throw new PgPreviewError(`Expected a text array in column "${column}".`);
+}
+
 export function boolean(row: Row, column: string): boolean {
   const value = row[column];
   if (typeof value === "boolean") return value;

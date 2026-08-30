@@ -73,9 +73,29 @@ Every test file targets one property of the design rather than one function:
 | `warnings.test.ts`  | hazards the read cannot see are reported rather than dropped |
 | `values.test.ts`    | every type family survives the text round trip               |
 | `read-only.test.ts` | a predicate that tries to write cannot                       |
+| `postgres.test.ts`  | drift under a genuinely concurrent writer (opt-in)           |
 
 A new refusal belongs in `refuse.test.ts`, a new warning in `warnings.test.ts`,
 and a new supported type in `values.test.ts`.
+
+### The Postgres suite
+
+`postgres.test.ts` is the one suite PGlite cannot stand in for. PGlite has a
+single backend, so the drift tests everywhere else interleave a writer
+sequentially and prove the mechanism rather than the race. This one uses two
+independent connections to a real server, and it is also the only place the
+`SELECT`-only role path is exercised, since PGlite has no roles.
+
+It skips unless you point it at a scratch database:
+
+```sh
+docker run -d --name pg -e POSTGRES_PASSWORD=pw -p 55433:5432 postgres:18
+PGPREVIEW_TEST_POSTGRES_URL=postgres://postgres:pw@localhost:55433/postgres pnpm test
+```
+
+It creates and drops its own `pgpreview_it` schema, and the role test needs an
+account that can `CREATE ROLE`. CI runs it on every PR against a service
+container, so you do not have to.
 
 ## Reporting a vulnerability
 

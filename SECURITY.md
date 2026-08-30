@@ -18,8 +18,11 @@ so the parts worth scrutiny are:
   write during a preview;
 - the identifier and type-name handling in `src/catalog.ts`, which is what keeps
   catalog-sourced names from being interpolated into SQL unchecked;
-- the apply path in `src/previewer.ts`, which reconstructs a statement from a
-  `Proposal`;
+- the apply path in `src/previewer.ts` and `src/insert.ts`, which reconstructs a
+  statement from a `Proposal`. Column and table names there go through
+  `quoteIdent` and every value is a bound parameter, so the field to watch is
+  any type name that reaches SQL uninterpolated; those pass `assertTypeName` on
+  the way in as well as when the catalog produced them;
 - the refusal list in `src/analyze.ts`, since a statement that slips past it
   gets a diff that may not describe what it does.
 
