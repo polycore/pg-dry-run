@@ -1,0 +1,108 @@
+# The quality gate, run on every PR and every push to main.
+#
+# Identical to what `pnpm verify` runs locally, so a green local run means a
+# green CI run. The build step is not optional: this package publishes compiled
+# output, and a type error that only surfaces during emit would otherwise reach
+# npm.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Format · lint · typecheck · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Format
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+  # The published artifact is what users actually get, and it is not what the
+  # test suite exercises. Pack it, install it into a bare project, and import it
+  # from plain Node: the failure this catches is a package that only resolves
+  # through a bundler.
+  consume:
+    name: Install the packed tarball and import it
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Pack
+        run: npm pack --pack-destination /tmp
+
+      - name: Import from a bare ESM project
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/consumer && cd /tmp/consumer
+          echo '{"name":"consumer","type":"module","private":true}' > package.json
+          npm install /tmp/pgpreview-*.tgz
+          cat > check.mjs <<'JS'
+          import { createPreviewer, PgPreviewError } from "pgpreview";
+          if (typeof createPreviewer !== "function") {
+            throw new Error("createPreviewer is not exported");
+          }
+          try {
+            createPreviewer({});
+            throw new Error("expected a guard on missing url/driver");
+          } catch (error) {
+            if (!(error instanceof PgPreviewError)) throw error;
+          }
+          console.log("packed tarball imports and runs from plain Node");
+          JS
+          node check.mjs

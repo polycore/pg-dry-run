@@ -1,0 +1,85 @@
+# Publish to npm
+#
+# Fires on the `pgpreview@X.Y.Z` tag that `release-version.yml` creates when the
+# "chore: version packages" PR merges. Humans never push that tag by hand.
+# `workflow_dispatch` is a break-glass manual publish of whatever `main` has.
+#
+# The publish is idempotent: a duplicate run for a version already on the
+# registry is a clean no-op rather than an npm 403.
+#
+# `id-token: write` is what lets npm attach a provenance attestation, which
+# `publishConfig.provenance` in package.json asks for. It ties the published
+# tarball to this workflow run and this commit.
+#
+# Required repo secret: NPM_TOKEN — an npm automation token with publish rights
+# on `pgpreview`.
+
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - "pgpreview@*.*.*"
+  workflow_dispatch:
+
+concurrency:
+  group: release-npm-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish the tagged version
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Publishing an untested build is how a broken release happens. The gate
+      # is cheap and the suite is hermetic, so run it here too.
+      - name: Verify
+        run: pnpm verify
+
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          version="$(node -p "require('./package.json').version")"
+
+          # A tag publish must publish exactly what the tag names.
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            expected="${GITHUB_REF_NAME##*@}"
+            if [[ "${version}" != "${expected}" ]]; then
+              echo "Tag names ${expected} but package.json says ${version}." >&2
+              exit 1
+            fi
+          elif [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "Manual publication must run from main, not ${GITHUB_REF}." >&2
+            exit 1
+          fi
+
+          if npm view "pgpreview@${version}" version >/dev/null 2>&1; then
+            echo "pgpreview@${version} is already on npm; skipping."
+          else
+            echo "Publishing pgpreview@${version}…"
+            pnpm publish --access public --no-git-checks
+          fi

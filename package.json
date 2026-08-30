@@ -1,0 +1,85 @@
+{
+  "name": "pgpreview",
+  "version": "0.0.0",
+  "description": "See exactly which rows a Postgres INSERT, UPDATE or DELETE would write, before it runs. Then apply only those rows, and only if none of them have changed.",
+  "keywords": [
+    "postgres",
+    "postgresql",
+    "sql",
+    "preview",
+    "dry-run",
+    "diff",
+    "approval",
+    "agent",
+    "safety",
+    "mcp"
+  ],
+  "homepage": "https://github.com/polycore/pgpreview#readme",
+  "bugs": "https://github.com/polycore/pgpreview/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/polycore/pgpreview.git"
+  },
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "rimraf dist && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "changeset": "changeset",
+    "changeset:status": "changeset status --since=origin/main",
+    "changeset:version": "changeset version",
+    "changeset:tag": "changeset tag",
+    "prepublishOnly": "pnpm build"
+  },
+  "dependencies": {
+    "pgsql-parser": "18.2.6",
+    "postgres": "3.4.9"
+  },
+  "devDependencies": {
+    "@changesets/changelog-github": "^0.7.0",
+    "@changesets/cli": "^2.31.1",
+    "@electric-sql/pglite": "0.3.16",
+    "@eslint/js": "10.0.1",
+    "@types/node": "25.6.2",
+    "eslint": "10.8.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-simple-import-sort": "13.0.0",
+    "globals": "17.6.0",
+    "prettier": "3.8.3",
+    "rimraf": "6.1.3",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.59.4",
+    "vitest": "4.1.10"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
