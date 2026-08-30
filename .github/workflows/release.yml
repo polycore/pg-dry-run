@@ -15,26 +15,30 @@
 # Humans never type a version number; the bump type comes from the changeset
 # markdown each PR carries.
 #
-# Publishing lives in this workflow rather than in a separate tag-triggered one
-# on purpose. The default GITHUB_TOKEN cannot trigger other workflows, so a
-# split would need a personal access token just to make the tag fire the
-# publish. One package with one publish target does not need that hop, and not
-# needing a long-lived PAT is worth more than the separation.
+# Publishing lives in this workflow rather than in a separate tag-triggered one,
+# so there is no tag handoff between workflows to arrange.
 #
-# The one thing this costs: a PR opened by GITHUB_TOKEN does not trigger CI on
-# itself, so the "chore: version packages" PR shows no checks. That PR only
-# touches package.json, CHANGELOG.md, and the changeset files, and `verify`
-# runs below before anything is published. If branch protection is ever set to
-# require checks before merge, swap GITHUB_TOKEN for a GitHub App token or a
-# fine-grained PAT so that PR gets its own CI run.
+# RELEASE_PAT rather than GITHUB_TOKEN, for a reason that is org policy and not
+# a preference: this organization disables write permissions for workflows, so
+# GITHUB_TOKEN cannot open the "chore: version packages" pull request and the
+# run fails with "GitHub Actions is not permitted to create or approve pull
+# requests". The repo-level toggle for this is refused with a 409 while the org
+# setting stands, and loosening it org-wide would hand every workflow in every
+# repo the ability to push code and approve its own PRs.
+#
+# It also means that PR gets its own CI run, which a GITHUB_TOKEN-opened PR does
+# not, so branch protection requiring checks stays workable.
 #
 # Provenance is off. npm rejects it from a private repository, and this one is
 # private for now. When the repo goes public, add `NPM_CONFIG_PROVENANCE: "true"`
 # back to the publish step's env; `id-token: write` is already granted below, so
 # that is the only change needed.
 #
-# Required repo secret: NPM_TOKEN — an npm automation token with publish rights
-# on `pg-dry-run`.
+# Required secrets:
+#   NPM_TOKEN   — npm token with publish rights on `pg-dry-run` (org secret).
+#   RELEASE_PAT — fine-grained PAT with `contents: write` and
+#                 `pull-requests: write` on this repo. Worth adding as an org
+#                 secret: every repo in this org hits the same policy.
 
 name: Release
 
@@ -90,5 +94,5 @@ jobs:
           commit: "chore: version packages"
           title: "chore: version packages"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
