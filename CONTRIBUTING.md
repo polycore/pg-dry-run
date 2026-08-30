@@ -59,6 +59,10 @@ While the package is pre-1.0:
 On merge, CI opens a `chore: version packages` PR. Merging that PR publishes to
 npm and tags the release.
 
+That PR is opened by the release workflow using `RELEASE_PAT`, not the default
+`GITHUB_TOKEN`, because this organization disables write permissions for
+workflows and `GITHUB_TOKEN` is therefore not allowed to create pull requests.
+
 ## Tests
 
 Every test file targets one property of the design rather than one function:
