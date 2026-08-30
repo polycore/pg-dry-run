@@ -85,8 +85,13 @@ export interface Warning {
 }
 
 /**
- * The mechanical detail `apply` needs, carried on the proposal so apply works
- * in a process that never saw the original statement. Opaque to callers.
+ * The mechanical detail `apply` needs, carried on the proposal so apply works in
+ * a process that never saw the original statement.
+ *
+ * This is part of the wire format rather than a private field, because a
+ * `Proposal` has to survive `JSON.stringify` and apply in another process. Read
+ * it if you want to, but `Proposal.columns` is the field to render: it answers
+ * "what does this write?" without depending on how the apply is built.
  */
 export interface ApplyPlan {
   /** Empty only for an `insert` into a table with no primary key. */
@@ -107,6 +112,12 @@ export interface Proposal {
   readonly kind: StatementKind;
   readonly table: TableRef;
   readonly rowCount: number;
+  /**
+   * Columns this statement would write, in the order the apply writes them.
+   * The assigned columns of an `update`, the written columns of an `insert`,
+   * and empty for a `delete`, which takes whole rows.
+   */
+  readonly columns: readonly string[];
   readonly changes: readonly RowChange[];
   readonly cascades: readonly CascadeNode[];
   readonly warnings: readonly Warning[];

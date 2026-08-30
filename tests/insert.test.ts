@@ -236,7 +236,7 @@ describe("apply", () => {
       "INSERT INTO ops.tickets (title) VALUES ('x')",
     );
     await h.pg.apply(p);
-    // The previewer itself holds nothing; re-applying the same document would
+    // The dry runner itself holds nothing; re-applying the same document would
     // insert a second row, so callers own single use. The runner's held-proposal
     // map is what enforces it end to end.
     expect(await countWhere(h.db, `FROM ops.tickets`)).toBe(3);

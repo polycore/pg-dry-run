@@ -4,7 +4,7 @@
  * of them have changed since.
  *
  * ```ts
- * const pg = createPreviewer({ url: process.env.DATABASE_URL });
+ * const pg = createDryRunner({ url: process.env.DATABASE_URL });
  *
  * const proposal = await pg.propose(
  *   "UPDATE profiles SET status = $1 WHERE email LIKE $2",
@@ -17,9 +17,9 @@
  * ```
  */
 
-export type { Analysis, InsertAnalysis, MutationAnalysis } from "./analyze.js";
-export { analyze } from "./analyze.js";
 export type { Driver, Row, Sql } from "./driver.js";
+export type { DryRunner, DryRunnerOptions } from "./dry-runner.js";
+export { createDryRunner } from "./dry-runner.js";
 export {
   PgDryRunError,
   ProposalExpiredError,
@@ -30,8 +30,6 @@ export {
 } from "./errors.js";
 export type { PostgresDriverOptions } from "./postgres-driver.js";
 export { postgresDriver } from "./postgres-driver.js";
-export type { Previewer, PreviewerOptions } from "./previewer.js";
-export { createPreviewer } from "./previewer.js";
 export type {
   ApplyPlan,
   CascadeNode,

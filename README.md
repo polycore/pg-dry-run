@@ -13,9 +13,9 @@ npm install pg-dry-run
 ```
 
 ```ts
-import { createPreviewer } from "pg-dry-run";
+import { createDryRunner } from "pg-dry-run";
 
-const pg = createPreviewer({ url: process.env.DATABASE_URL });
+const pg = createDryRunner({ url: process.env.DATABASE_URL });
 
 const proposal = await pg.propose(
   "UPDATE profiles SET status = $1 WHERE email LIKE $2",
@@ -198,7 +198,7 @@ write-incapability is enforced by PostgreSQL privileges rather than by this
 library being correct. It is an upgrade, never a requirement:
 
 ```ts
-const pg = createPreviewer({
+const pg = createDryRunner({
   url: process.env.DATABASE_URL, // apply
   readUrl: process.env.DATABASE_URL_READONLY, // preview
 });
@@ -263,9 +263,9 @@ Stated here rather than discovered later:
 ## API
 
 ```ts
-createPreviewer(options: PreviewerOptions): Previewer
+createDryRunner(options: DryRunnerOptions): DryRunner
 
-interface Previewer {
+interface DryRunner {
   propose(statement: string, params?: readonly unknown[]): Promise<Proposal>;
   apply(proposal: Proposal): Promise<Receipt>;
   close(): Promise<void>;
@@ -274,6 +274,16 @@ interface Previewer {
 
 Options: `url`, `readUrl`, `driver`, `readDriver`, `maxRows` (1000), `ttlMs`
 (5 min), `statementTimeoutMs` (10s), `labelColumns`, `cascadeDepth` (5), `now`.
+
+The method is `propose` rather than `dryRun` because what comes back is a
+`Proposal`: a thing to be approved, not just a run that did nothing. `apply`
+takes it from there.
+
+A `Proposal` carries `rowCount`, the per-row `changes`, the `cascades` a delete
+would reach, any `warnings`, the `derivedSql` that produced it, and `columns`,
+the columns the statement would write. It also carries a `plan`, which exists so
+`apply` can rebuild the statement in another process; `columns` is the field to
+render.
 
 A `Receipt` carries `rowsAffected` and `keys`, the primary keys of the rows the
 apply touched. For an insert those are the only way to learn a key the database

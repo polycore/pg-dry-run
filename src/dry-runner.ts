@@ -41,7 +41,7 @@ import type {
 } from "./types.js";
 import { mutationWarnings } from "./warnings.js";
 
-export interface PreviewerOptions {
+export interface DryRunnerOptions {
   /**
    * Connection string. Used for previews and for applies.
    *
@@ -84,7 +84,7 @@ export interface PreviewerOptions {
   readonly now?: () => Date;
 }
 
-export interface Previewer {
+export interface DryRunner {
   /** Derive a read-only preview of what `statement` would change. */
   propose(statement: string, params?: readonly unknown[]): Promise<Proposal>;
   /** Apply exactly the rows in `proposal`, only if none of them have changed. */
@@ -112,14 +112,14 @@ const CASCADE_KEYS_PER_LEVEL = 5_000;
  */
 const NUL = "\u0000";
 
-export function createPreviewer(options: PreviewerOptions): Previewer {
+export function createDryRunner(options: DryRunnerOptions): DryRunner {
   const ownedDrivers: Driver[] = [];
 
   let writeDriver = options.driver;
   if (!writeDriver) {
     if (options.url === undefined) {
       throw new PgDryRunError(
-        "createPreviewer needs either a `url` or a `driver`.",
+        "createDryRunner needs either a `url` or a `driver`.",
       );
     }
     writeDriver = postgresDriver(options.url);
@@ -172,6 +172,9 @@ export function createPreviewer(options: PreviewerOptions): Previewer {
               kind: "insert",
               table: relation.ref,
               rowCount: preview.changes.length,
+              columns: preview.plan.assignments.map(
+                (assignment) => assignment.column,
+              ),
               changes: preview.changes,
               // An insert reaches no further than the row it creates: a foreign
               // key constrains it rather than carrying it anywhere.
@@ -229,6 +232,7 @@ export function createPreviewer(options: PreviewerOptions): Previewer {
             ...identity(clock(), ttlMs),
             kind: analysis.kind,
             table: relation.ref,
+            columns: derived.assignedColumns,
             rowCount: changes.length,
             changes,
             cascades: cascade.nodes,

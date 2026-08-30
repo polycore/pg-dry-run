@@ -172,3 +172,42 @@ describe("propose", () => {
     });
   });
 });
+
+/**
+ * `columns` answers "what does this write?" without a caller reaching into
+ * `plan`, which exists to rebuild the apply rather than to be rendered.
+ */
+describe("columns", () => {
+  it("names the assigned columns of an update", async () => {
+    const p = await h.pg.propose(
+      "UPDATE profiles SET status = $1, email = $2 WHERE email = $3",
+      ["suspended", "new@acme.com", "alice@acme.com"],
+    );
+    expect(p.columns).toEqual(["status", "email"]);
+  });
+
+  it("is empty for a delete, which takes whole rows", async () => {
+    const p = await h.pg.propose("DELETE FROM profiles WHERE email = $1", [
+      "alice@acme.com",
+    ]);
+    expect(p.columns).toEqual([]);
+  });
+
+  it("names every column an insert writes, defaults included", async () => {
+    const p = await h.pg.propose("INSERT INTO widgets (name) VALUES ($1)", [
+      "sprocket",
+    ]);
+    // Not just `name`: the columns the table fills are written too.
+    expect(p.columns).toContain("name");
+    expect(p.columns).toContain("qty");
+    expect(p.columns).toContain("active");
+  });
+
+  it("survives the JSON round trip the proposal is built for", async () => {
+    const p = await h.pg.propose(
+      "UPDATE profiles SET status = $1 WHERE email = $2",
+      ["suspended", "alice@acme.com"],
+    );
+    expect(JSON.parse(JSON.stringify(p)).columns).toEqual(["status"]);
+  });
+});
