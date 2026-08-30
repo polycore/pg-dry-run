@@ -1,6 +1,6 @@
 {
   "name": "pgpreview",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "See exactly which rows a Postgres INSERT, UPDATE or DELETE would write, before it runs. Then apply only those rows, and only if none of them have changed.",
   "keywords": [
     "postgres",
@@ -80,7 +80,6 @@
   },
   "packageManager": "pnpm@10.33.0",
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   }
 }
