@@ -93,7 +93,10 @@ jobs:
         run: pnpm verify
 
       - name: Create the Version PR or publish
-        uses: changesets/action@v2
+        # Pinned to a commit rather than @v2: that is a branch, not a tag, so
+        # it moves under us and whatever it points at runs here with a token
+        # that can push to main. Bump deliberately.
+        uses: changesets/action@fdf536a68c4154480c89b42547f8102cf0d8bc47 # v2.1.1
         with:
           version-script: pnpm changeset:version
           publish-script: pnpm changeset:publish
