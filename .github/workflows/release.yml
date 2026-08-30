@@ -10,7 +10,7 @@
 #          refreshes `pnpm-lock.yaml`.
 #   2. When that PR merges:
 #        → No changesets are left, so the action runs `pnpm changeset:publish`,
-#          which publishes to npm and creates the `pgdryrun@X.Y.Z` git tag.
+#          which publishes to npm and creates the `pg-dry-run@X.Y.Z` git tag.
 #
 # Humans never type a version number; the bump type comes from the changeset
 # markdown each PR carries.
@@ -36,7 +36,7 @@
 # env var below if this repo is not public yet.
 #
 # Required repo secret: NPM_TOKEN — an npm automation token with publish rights
-# on `pgdryrun`.
+# on `pg-dry-run`.
 
 name: Release
 

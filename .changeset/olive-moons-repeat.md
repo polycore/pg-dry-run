@@ -1,5 +1,5 @@
 ---
-"pgdryrun": minor
+"pg-dry-run": minor
 ---
 
 Close three gaps where the library could be wrong without saying so.

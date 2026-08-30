@@ -1,5 +1,5 @@
 /**
- * The only thing pgdryrun needs from a database: run parameterised SQL on a
+ * The only thing pg-dry-run needs from a database: run parameterised SQL on a
  * session it has exclusive use of.
  *
  * Session affinity is not optional. Previews run inside

@@ -90,10 +90,10 @@ It skips unless you point it at a scratch database:
 
 ```sh
 docker run -d --name pg -e POSTGRES_PASSWORD=pw -p 55433:5432 postgres:18
-PGDRYRUN_TEST_POSTGRES_URL=postgres://postgres:pw@localhost:55433/postgres pnpm test
+PG_DRY_RUN_TEST_POSTGRES_URL=postgres://postgres:pw@localhost:55433/postgres pnpm test
 ```
 
-It creates and drops its own `pgdryrun_it` schema, and the role test needs an
+It creates and drops its own `dry_run_it` schema, and the role test needs an
 account that can `CREATE ROLE`. CI runs it on every PR against a service
 container, so you do not have to.
 

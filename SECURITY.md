@@ -5,7 +5,7 @@
 Please do not open a public issue.
 
 Report privately through
-[GitHub Security Advisories](https://github.com/polycore/pgdryrun/security/advisories/new),
+[GitHub Security Advisories](https://github.com/polycore/pg-dry-run/security/advisories/new),
 or email <support@polycore.ai>. We will acknowledge within three working days
 and keep you updated until it is resolved.
 

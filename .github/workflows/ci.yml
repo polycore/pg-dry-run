@@ -96,7 +96,7 @@ jobs:
 
       - name: Test
         env:
-          PGDRYRUN_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres
+          PG_DRY_RUN_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres
         run: pnpm test
 
   # The published artifact is what users actually get, and it is not what the
@@ -134,9 +134,9 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/consumer && cd /tmp/consumer
           echo '{"name":"consumer","type":"module","private":true}' > package.json
-          npm install /tmp/pgdryrun-*.tgz
+          npm install /tmp/pg-dry-run-*.tgz
           cat > check.mjs <<'JS'
-          import { createPreviewer, PgDryRunError } from "pgdryrun";
+          import { createPreviewer, PgDryRunError } from "pg-dry-run";
           if (typeof createPreviewer !== "function") {
             throw new Error("createPreviewer is not exported");
           }

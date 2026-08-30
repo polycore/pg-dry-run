@@ -1,19 +1,19 @@
-# pgdryrun
+# pg-dry-run
 
-[![CI](https://github.com/polycore/pgdryrun/actions/workflows/ci.yml/badge.svg)](https://github.com/polycore/pgdryrun/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/pgdryrun.svg)](https://www.npmjs.com/package/pgdryrun)
-[![license](https://img.shields.io/npm/l/pgdryrun.svg)](LICENSE)
+[![CI](https://github.com/polycore/pg-dry-run/actions/workflows/ci.yml/badge.svg)](https://github.com/polycore/pg-dry-run/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/pg-dry-run.svg)](https://www.npmjs.com/package/pg-dry-run)
+[![license](https://img.shields.io/npm/l/pg-dry-run.svg)](LICENSE)
 
 See exactly which rows a Postgres `INSERT`, `UPDATE` or `DELETE` would write,
 before it runs. Then apply only those rows, and only if none of them have
 changed since.
 
 ```sh
-npm install pgdryrun
+npm install pg-dry-run
 ```
 
 ```ts
-import { createPreviewer } from "pgdryrun";
+import { createPreviewer } from "pg-dry-run";
 
 const pg = createPreviewer({ url: process.env.DATABASE_URL });
 
@@ -151,7 +151,7 @@ Two properties follow from the mechanism rather than from a rule:
 
 ## Approval is yours
 
-pgdryrun produces the artifact you approve. It does not own the workflow, the
+pg-dry-run produces the artifact you approve. It does not own the workflow, the
 identity, or the transport:
 
 ```ts
@@ -181,7 +181,7 @@ None of those are Postgres problems, so none of them are in this library.
 
 [Polycore](https://polycore.ai) is where we build them: governed production
 access for agents and humans, with the approval, the identity, and the audit log
-around it, and credentials that stay inside your own infrastructure. pgdryrun
+around it, and credentials that stay inside your own infrastructure. pg-dry-run
 is the piece that answers what a write would actually do, and it is open source
 because that question is worth answering whether or not you use the rest.
 

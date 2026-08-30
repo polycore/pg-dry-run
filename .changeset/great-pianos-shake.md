@@ -1,10 +1,10 @@
 ---
-"pgdryrun": minor
+"pg-dry-run": minor
 ---
 
 First release.
 
-`pgdryrun` derives a read-only preview of what a Postgres `INSERT`, `UPDATE` or
+`pg-dry-run` derives a read-only preview of what a Postgres `INSERT`, `UPDATE` or
 `DELETE` would write, then applies only the previewed rows and only if none of
 them have moved since.
 

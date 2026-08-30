@@ -25,13 +25,15 @@ import {
  *
  * Opt in by pointing at a scratch database:
  *
- *   PGDRYRUN_TEST_POSTGRES_URL=postgres://localhost/postgres pnpm test
+ *   PG_DRY_RUN_TEST_POSTGRES_URL=postgres://localhost/postgres pnpm test
  *
  * Without it the suite reports as skipped rather than passing quietly.
  */
-const url = process.env["PGDRYRUN_TEST_POSTGRES_URL"] ?? "";
+const url = process.env["PG_DRY_RUN_TEST_POSTGRES_URL"] ?? "";
 
-const SCHEMA = "pgdryrun_it";
+// Not `pg_dry_run_it`: PostgreSQL reserves the `pg_` prefix for system schemas
+// and system roles, and rejects both outright.
+const SCHEMA = "dry_run_it";
 
 describe.runIf(url !== "")("against a real Postgres server", () => {
   // Two connections that know nothing about each other: the previewer's, and
@@ -159,8 +161,8 @@ describe.runIf(url !== "")("against a real Postgres server", () => {
   });
 
   it("previews through a SELECT-only role, and that role cannot write", async () => {
-    const role = "pgdryrun_it_reader";
-    const password = "pgdryrun_it_pw";
+    const role = "dry_run_it_reader";
+    const password = "dry_run_it_pw";
     await admin.unsafe(`DROP ROLE IF EXISTS ${role}`);
     await admin.unsafe(`CREATE ROLE ${role} LOGIN PASSWORD '${password}'`);
     await admin.unsafe(`GRANT USAGE ON SCHEMA ${SCHEMA} TO ${role}`);
