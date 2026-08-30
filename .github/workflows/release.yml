@@ -10,7 +10,13 @@
 #          refreshes `pnpm-lock.yaml`.
 #   2. When that PR merges:
 #        → No changesets are left, so the action runs `pnpm changeset:publish`,
-#          which publishes to npm and creates the `pg-dry-run@X.Y.Z` git tag.
+#          which publishes to npm. The action then pushes the
+#          `pg-dry-run@X.Y.Z` git tag and cuts the matching GitHub release.
+#
+# The action major must track the Changesets CLI major. `changesets/action@v1`
+# reads the CLI's stdout to learn what was published, and it cannot parse the
+# output of CLI v3, so a v1 + v3 pairing publishes to npm and then silently
+# creates no tag and no release. v2 of the action is the one that speaks v3.
 #
 # Humans never type a version number; the bump type comes from the changeset
 # markdown each PR carries.
@@ -87,12 +93,21 @@ jobs:
         run: pnpm verify
 
       - name: Create the Version PR or publish
-        uses: changesets/action@v1
+        uses: changesets/action@v2
         with:
-          version: pnpm changeset:version
-          publish: pnpm changeset:publish
-          commit: "chore: version packages"
-          title: "chore: version packages"
+          version-script: pnpm changeset:version
+          publish-script: pnpm changeset:publish
+          commit-message: "chore: version packages"
+          pr-title: "chore: version packages"
+          # v2 stopped reading a custom token from the GITHUB_TOKEN env var; it
+          # has to arrive as an input or the action silently uses the job's own
+          # token, which this org does not let open pull requests.
+          github-token: ${{ secrets.RELEASE_PAT }}
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
+          # The action looks for NPM_TOKEN specifically. Passing only
+          # NODE_AUTH_TOKEN (which is what the .npmrc setup-node wrote refers
+          # to) left the action believing it had no credentials, and it quietly
+          # fell back to OIDC trusted publishing. Set both: NPM_TOKEN so the
+          # action knows, NODE_AUTH_TOKEN so the publish itself authenticates.
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

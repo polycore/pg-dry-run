@@ -63,6 +63,11 @@ That PR is opened by the release workflow using `RELEASE_PAT`, not the default
 `GITHUB_TOKEN`, because this organization disables write permissions for
 workflows and `GITHUB_TOKEN` is therefore not allowed to create pull requests.
 
+If you upgrade `@changesets/cli` across a major, upgrade `changesets/action` to
+match. The action reads the CLI's stdout to learn what was published, so a
+mismatched pair publishes to npm and then silently creates no git tag and no
+GitHub release.
+
 ## Tests
 
 Every test file targets one property of the design rather than one function:
