@@ -2,9 +2,9 @@ import postgres from "postgres";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
-  createPreviewer,
+  createDryRunner,
+  type DryRunner,
   postgresDriver,
-  type Previewer,
   StateChangedError,
 } from "../src/index.js";
 
@@ -36,11 +36,11 @@ const url = process.env["PG_DRY_RUN_TEST_POSTGRES_URL"] ?? "";
 const SCHEMA = "dry_run_it";
 
 describe.runIf(url !== "")("against a real Postgres server", () => {
-  // Two connections that know nothing about each other: the previewer's, and
+  // Two connections that know nothing about each other: the dry runner's, and
   // the one standing in for whoever else is writing to your database.
   const admin = postgres(url, { max: 1, onnotice: () => undefined });
   const other = postgres(url, { max: 1, onnotice: () => undefined });
-  const pg: Previewer = createPreviewer({ driver: postgresDriver(url) });
+  const pg: DryRunner = createDryRunner({ driver: postgresDriver(url) });
 
   beforeEach(async () => {
     await admin.unsafe(`DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE`);
@@ -174,7 +174,7 @@ describe.runIf(url !== "")("against a real Postgres server", () => {
     readUrl.username = role;
     readUrl.password = password;
 
-    const split = createPreviewer({
+    const split = createDryRunner({
       driver: postgresDriver(url),
       readDriver: postgresDriver(readUrl.toString()),
     });

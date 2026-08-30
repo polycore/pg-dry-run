@@ -136,12 +136,12 @@ jobs:
           echo '{"name":"consumer","type":"module","private":true}' > package.json
           npm install /tmp/pg-dry-run-*.tgz
           cat > check.mjs <<'JS'
-          import { createPreviewer, PgDryRunError } from "pg-dry-run";
-          if (typeof createPreviewer !== "function") {
-            throw new Error("createPreviewer is not exported");
+          import { createDryRunner, PgDryRunError } from "pg-dry-run";
+          if (typeof createDryRunner !== "function") {
+            throw new Error("createDryRunner is not exported");
           }
           try {
-            createPreviewer({});
+            createDryRunner({});
             throw new Error("expected a guard on missing url/driver");
           } catch (error) {
             if (!(error instanceof PgDryRunError)) throw error;

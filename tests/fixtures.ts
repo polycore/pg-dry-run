@@ -1,10 +1,10 @@
 import { PGlite } from "@electric-sql/pglite";
 
-import { createPreviewer, type Previewer } from "../src/index.js";
+import { createDryRunner, type DryRunner } from "../src/index.js";
 import { pgliteDriver } from "./pglite-driver.js";
 
 /**
- * One schema covering every shape the previewer has to reason about: cascading
+ * One schema covering every shape the dry runner has to reason about: cascading
  * and restricting foreign keys, a composite key, a keyless table, BEFORE
  * triggers on update and on insert, a unique column, a generated column, a
  * sequence-assigned key, a volatile default, a non-public schema, and a column
@@ -173,7 +173,7 @@ INSERT INTO ops.tickets (title) VALUES ('printer on fire'), ('coffee machine');
 
 export interface Harness {
   readonly db: PGlite;
-  readonly pg: Previewer;
+  readonly pg: DryRunner;
   reset(): Promise<void>;
   close(): Promise<void>;
 }
@@ -195,7 +195,7 @@ export async function harness(
   await db.exec(SCHEMA);
   await db.exec(SEED);
 
-  const pg = createPreviewer({
+  const pg = createDryRunner({
     driver: pgliteDriver(db),
     ...(options.maxRows === undefined ? {} : { maxRows: options.maxRows }),
     ...(options.now === undefined ? {} : { now: options.now }),

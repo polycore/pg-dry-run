@@ -28,12 +28,10 @@
 # require checks before merge, swap GITHUB_TOKEN for a GitHub App token or a
 # fine-grained PAT so that PR gets its own CI run.
 #
-# `id-token: write` plus NPM_CONFIG_PROVENANCE below is what lets npm attach a
-# provenance attestation, tying the published tarball to this workflow run and
-# this commit. It is requested here rather than in `publishConfig` so a local
-# publish (the one that claims the name on npm) is not asking for something only
-# CI can produce. npm rejects provenance from a private repository, so drop the
-# env var below if this repo is not public yet.
+# Provenance is off. npm rejects it from a private repository, and this one is
+# private for now. When the repo goes public, add `NPM_CONFIG_PROVENANCE: "true"`
+# back to the publish step's env; `id-token: write` is already granted below, so
+# that is the only change needed.
 #
 # Required repo secret: NPM_TOKEN — an npm automation token with publish rights
 # on `pg-dry-run`.
@@ -94,4 +92,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: "true"
