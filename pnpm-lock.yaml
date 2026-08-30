@@ -9,10 +9,10 @@ importers:
   .:
     dependencies:
       pgsql-parser:
-        specifier: 18.2.6
+        specifier: ^18.2.6
         version: 18.2.6
       postgres:
-        specifier: 3.4.9
+        specifier: ^3.4.9
         version: 3.4.9
     devDependencies:
       '@changesets/changelog-github':
