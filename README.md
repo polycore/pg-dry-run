@@ -1,12 +1,30 @@
-# pg-dry-run
+<p align="center">
+  <img src=".github/assets/pg-dry-run-wordmark.png" alt="pg-dry-run" width="920">
+</p>
 
-[![CI](https://github.com/polycore/pg-dry-run/actions/workflows/ci.yml/badge.svg)](https://github.com/polycore/pg-dry-run/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/pg-dry-run.svg)](https://www.npmjs.com/package/pg-dry-run)
-[![license](https://img.shields.io/npm/l/pg-dry-run.svg)](LICENSE)
+<p align="center">
+  <strong>See exactly which rows a Postgres write would change before it runs.</strong>
+  <br>
+  Preview the effect. Approve the rows. Apply only if none of them have changed.
+</p>
 
-See exactly which rows a Postgres `INSERT`, `UPDATE` or `DELETE` would write,
-before it runs. Then apply only those rows, and only if none of them have
-changed since.
+<p align="center">
+  <a href="https://github.com/polycore/pg-dry-run/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/polycore/pg-dry-run/ci.yml?branch=main&amp;style=flat-square&amp;label=CI" alt="CI status"></a>
+  <a href="https://www.npmjs.com/package/pg-dry-run"><img src="https://img.shields.io/npm/v/pg-dry-run.svg?style=flat-square" alt="npm version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/npm/l/pg-dry-run.svg?style=flat-square" alt="MIT license"></a>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick start</a>
+  · <a href="#why-pg-dry-run">Why</a>
+  · <a href="#how-it-works">How it works</a>
+  · <a href="#what-it-refuses">Safety</a>
+  · <a href="#api">API</a>
+</p>
+
+---
+
+## Quick start
 
 ```sh
 npm install pg-dry-run
@@ -25,6 +43,8 @@ const proposal = await pg.propose(
 proposal.rowCount; // 14, not the 1 you expected
 ```
 
+The proposal contains the exact rows and fields the statement would affect:
+
 ```
 14 rows would change in profiles
 
@@ -39,7 +59,17 @@ this preview is partial
     written, which this preview cannot see.
 ```
 
-## Why
+Nothing is written during `propose()`. Pass the proposal through your own
+approval flow, then apply exactly what was reviewed:
+
+```ts
+if (await yourApprovalFlow(proposal)) {
+  const receipt = await pg.apply(proposal);
+  receipt.rowsAffected; // 14
+}
+```
+
+## Why pg-dry-run
 
 The two things people do today both fail.
 
@@ -57,13 +87,19 @@ looks correct, so they approve, and it hits fourteen rows because the CI bot
 also has an `@acme.com` address. The information that would have saved them is
 in the data, not the statement.
 
-Both are the same mistake: gating on the request. What a statement will do is a
-property of the data it runs against, so the only way to gate on the effect is
-to go and find out.
+> Both are the same mistake: gating on the request. What a statement will do is
+> a property of the data it runs against, so the only way to gate on the effect
+> is to go and find out.
 
-## How
+## How it works
 
-**1. The mutation is rewritten into a read.** The statement is parsed with
+<p align="center">
+  <code>mutation → read-only proposal → approval → version-pinned apply</code>
+</p>
+
+### 1. Rewrite the mutation into a read
+
+The statement is parsed with
 PostgreSQL's own parser and turned into an equivalent `SELECT`. The predicate is
 copied across as an AST subtree, untouched, so any predicate Postgres can parse
 is supported.
@@ -82,7 +118,9 @@ SELECT id, xmin::text, email::text,
 
 Read `proposal.derivedSql` to see the exact query that ran.
 
-**2. An insert is resolved rather than echoed.** An insert names its rows
+### 2. Resolve inserts rather than echoing them
+
+An insert names its rows
 literally, so nothing about which rows it touches is in doubt. What is hidden is
 the other half of each row, the half the table supplies:
 
@@ -109,7 +147,9 @@ const receipt = await pg.apply(p);
 receipt.keys; // [{ id: "4821" }]
 ```
 
-**3. The catalog is asked what a rewrite cannot see.** Triggers, rewrite rules,
+### 3. Ask the catalog what a rewrite cannot see
+
+Triggers, rewrite rules,
 generated columns, unique columns, and every foreign key pointing at the target.
 For a delete this is the important part, because a rewritten read selects from
 one table while `ON DELETE CASCADE` reaches many:
@@ -125,7 +165,9 @@ p.cascades;
 // invoices          depth 0   1 row    restrict   <- this delete will fail
 ```
 
-**4. Apply is pinned to what was shown.** Every row carries its `xmin`, the
+### 4. Pin the apply to what was shown
+
+Every row carries its `xmin`, the
 transaction id that last wrote that row version. The apply re-runs the mutation
 matched on those versions, in one transaction:
 
@@ -149,7 +191,7 @@ Two properties follow from the mechanism rather than from a rule:
   that starts matching the predicate while the approval is pending is not
   eligible. You approved fourteen rows; exactly those fourteen can change.
 
-## Approval is yours
+## Bring your own approval flow
 
 pg-dry-run produces the artifact you approve. It does not own the workflow, the
 identity, or the transport:
@@ -307,6 +349,7 @@ MIT. See [LICENSE](LICENSE).
 
 ---
 
-Built and maintained by [Polycore](https://polycore.ai), which does governed
-production access for agents and humans. If you want the approval flow, the
-identity, and the audit log around this, that is what we make.
+<p align="center">
+  Built and maintained by <a href="https://polycore.ai">Polycore</a> — governed
+  production access for agents and humans.
+</p>
