@@ -3,9 +3,10 @@
 </p>
 
 <p align="center">
-  <strong>See exactly which rows a Postgres write would change before it runs.</strong>
+  <strong>Preview the effect of agent-generated Postgres writes before they run.</strong>
   <br>
-  Preview the effect. Approve the rows. Apply only if none of them have changed.
+  Turn <code>INSERT</code>, <code>UPDATE</code>, and <code>DELETE</code> into
+  row-level proposals you can inspect, approve, and apply safely.
 </p>
 
 <p align="center">
@@ -15,20 +16,61 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick start</a>
-  · <a href="#why-pg-dry-run">Why</a>
+  <a href="#why-this-exists">Why</a>
+  · <a href="#quick-start">Quick start</a>
   · <a href="#how-it-works">How it works</a>
-  · <a href="#what-it-refuses">Safety</a>
+  · <a href="#how-polycore-uses-pg-dry-run">Polycore</a>
+  · <a href="#safety-model">Safety</a>
   · <a href="#api">API</a>
 </p>
 
 ---
+
+## Why this exists
+
+AI agents are becoming good enough to inspect schemas, generate SQL, and operate
+real applications. Giving an agent read access to Postgres is useful and can be
+contained with a read-only role. Giving it write access is a different problem.
+
+An agent can generate a perfectly valid statement that does something nobody
+intended:
+
+```sql
+UPDATE profiles SET status = 'suspended' WHERE email LIKE '%@acme.com';
+```
+
+The SQL looks reasonable. The production data decides whether it updates one
+account or fourteen, including a service account nobody remembered. An insert
+can pick up a dangerous column default that never appears in the statement. A
+delete can reach other tables through foreign keys.
+
+Static SQL checks cannot answer those questions because the answers are not in
+the query text. Asking a person to approve the SQL has the same limitation: they
+see the instruction, not its effect on the current database.
+
+> The useful safety question is not “Does this SQL look reasonable?” It is
+> “Which rows will change, how will they change, and what else will be affected?”
+
+`pg-dry-run` adds that missing preview step. It evaluates a write as a read,
+returns a plain JSON proposal with the rows and changes, and later applies only
+what was previewed. If any existing row changed while the proposal was waiting,
+the entire apply is rejected.
+
+<p align="center">
+  <code>agent-generated SQL → read-only preview → policy or approval → guarded apply</code>
+</p>
+
+The library does not run an AI model and does not prescribe an approval UI. It
+takes SQL and bound parameters, then provides the database mechanism an agent,
+CLI, admin tool, or approval system can build on.
 
 ## Quick start
 
 ```sh
 npm install pg-dry-run
 ```
+
+Create a runner and propose a write:
 
 ```ts
 import { createDryRunner } from "pg-dry-run";
@@ -43,9 +85,10 @@ const proposal = await pg.propose(
 proposal.rowCount; // 14, not the 1 you expected
 ```
 
-The proposal contains the exact rows and fields the statement would affect:
+`proposal` is plain JSON. A terminal, agent, or approval screen can render it
+like this:
 
-```
+```text
 14 rows would change in profiles
 
   a3f2…  alice@acme.com        status: active -> suspended
@@ -54,13 +97,12 @@ The proposal contains the exact rows and fields the statement would affect:
   b700…  intern-2024@acme.com  status: active -> suspended
   … 10 more
 
-this preview is partial
-  ! BEFORE UPDATE trigger touch_updated_at may change the values actually
-    written, which this preview cannot see.
+warning
+  BEFORE UPDATE trigger touch_updated_at may change the values actually written
 ```
 
-Nothing is written during `propose()`. Pass the proposal through your own
-approval flow, then apply exactly what was reviewed:
+Pass the proposal through your own policy or approval flow. `apply()` writes the
+previewed rows in one transaction:
 
 ```ts
 if (await yourApprovalFlow(proposal)) {
@@ -69,175 +111,156 @@ if (await yourApprovalFlow(proposal)) {
 }
 ```
 
-## Why pg-dry-run
+## What the preview contains
 
-The two things people do today both fail.
+| Statement  | What `pg-dry-run` reports                                                                                                                                                      |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `UPDATE`   | Every matched row, its primary key, and the before and after values for each assigned column.                                                                                  |
+| `DELETE`   | Every matched row, plus reachable foreign keys, cascade counts, and restrictions that would make the delete fail.                                                              |
+| `INSERT`   | The complete row the table would create, including values supplied by column defaults. Sequence-generated keys are reported after apply because `nextval()` is itself a write. |
+| All writes | The target table, affected columns, warnings, timestamps, and the derived SQL used for the preview.                                                                            |
 
-**Checking the statement.** Block it unless it looks safe. This asserts a
-property of a program you did not write, and the property is not in the text:
-
-```sql
-WITH d AS (DELETE FROM users RETURNING *) SELECT count(*) FROM d
-```
-
-Valid SQL, starts with `WITH`, returns a row, empties the table.
-
-**Confirming the statement.** Show a human the SQL and ask yes or no. The SQL
-looks correct, so they approve, and it hits fourteen rows because the CI bot
-also has an `@acme.com` address. The information that would have saved them is
-in the data, not the statement.
-
-> Both are the same mistake: gating on the request. What a statement will do is
-> a property of the data it runs against, so the only way to gate on the effect
-> is to go and find out.
+The default limit is 1,000 rows. Larger writes are refused rather than reduced
+to a count that nobody can meaningfully review.
 
 ## How it works
 
-<p align="center">
-  <code>mutation → read-only proposal → approval → version-pinned apply</code>
-</p>
+### 1. Parse the statement
 
-### 1. Rewrite the mutation into a read
+The library parses one `INSERT`, `UPDATE`, or `DELETE` with PostgreSQL's parser.
+It rejects statement shapes it cannot represent faithfully.
 
-The statement is parsed with
-PostgreSQL's own parser and turned into an equivalent `SELECT`. The predicate is
-copied across as an AST subtree, untouched, so any predicate Postgres can parse
-is supported.
+For an update or delete, it copies the original predicate as an untouched syntax
+tree into an equivalent `SELECT`:
 
 ```sql
--- you called propose() with:
-UPDATE profiles SET status = $1 WHERE email LIKE $2
+-- input
+UPDATE profiles SET status = $1 WHERE email LIKE $2;
 
--- it runs:
-SELECT id, xmin::text, email::text,
-       status AS "status.before",
-       ($1::text)::text AS "status.after"
-  FROM profiles
- WHERE email LIKE $2
+-- derived preview
+SELECT
+  id,
+  xmin::text,
+  email::text,
+  status AS "status.before",
+  ($1::text)::text AS "status.after"
+FROM profiles
+WHERE email LIKE $2;
 ```
 
-Read `proposal.derivedSql` to see the exact query that ran.
+The caller or model never supplies the derived query. Read
+`proposal.derivedSql` to inspect exactly what ran.
 
-### 2. Resolve inserts rather than echoing them
+### 2. Evaluate the effect without writing
 
-An insert names its rows
-literally, so nothing about which rows it touches is in doubt. What is hidden is
-the other half of each row, the half the table supplies:
+The preview runs inside `BEGIN TRANSACTION READ ONLY`. The library also reads
+Postgres catalog metadata for primary keys, column types, generated columns,
+triggers, rewrite rules, unique columns, and foreign keys.
+
+Inserts take a slightly different path. Their rows are already explicit, but
+the finished row is not: the table may supply defaults for columns the
+statement never mentions. `pg-dry-run` resolves those values during the preview
+and uses the resolved values during apply.
+
+### 3. Return a portable proposal
+
+A `Proposal` contains the row-level diff, cascade reach, warnings, derived SQL,
+and the plan needed to rebuild the write. It has no methods and survives JSON
+serialization, so the preview and apply can happen in different processes.
+
+Treat a proposal as a capability, not as an inert report. If it crosses a queue
+or network boundary, authenticate it before passing it back to `apply()`.
+
+### 4. Apply only the previewed change
+
+For updates and deletes, each previewed row carries its primary key and `xmin`,
+the Postgres transaction ID for that row version. The apply names those exact
+keys and versions instead of running the original predicate again.
+
+That gives the apply two useful properties:
+
+- A row that starts matching the predicate after the preview cannot join the
+  approved set.
+- A previewed row that was modified or deleted causes the whole transaction to
+  abort with `StateChangedError`. No partial write lands.
+
+An insert is pinned to the values resolved during preview. For example, a
+`created_at DEFAULT now()` keeps the previewed timestamp rather than evaluating
+`now()` again after approval.
+
+## How Polycore uses pg-dry-run
+
+`pg-dry-run` is the effect engine behind Polycore's Postgres write path.
+[Polycore](https://polycore.ai) gives AI agents and people governed access to
+production systems without handing them production credentials.
+
+For a one-off Postgres write, the flow is:
+
+1. An agent generates a parameterized `INSERT`, `UPDATE`, or `DELETE` and calls
+   a Polycore Postgres capability.
+2. A Polycore runner inside the customer's infrastructure calls
+   `pg-dry-run.propose()` next to the database. The database credential remains
+   in that infrastructure.
+3. Polycore turns the proposal into an effect that policy can evaluate: target
+   table, operation, row count, written columns, cascade reach, and warnings. A
+   capped row-level diff is available to the human reviewer.
+4. Policy can reject the write, allow it, or hold it for approval. The caller,
+   environment, request, effect, and decision are recorded together.
+5. Once the write is cleared, the runner calls `apply()` with the held proposal.
+   The row-version check still protects the gap between preview and execution.
+
+This separation is intentional:
+
+| `pg-dry-run`                                     | Polycore                                                             |
+| ------------------------------------------------ | -------------------------------------------------------------------- |
+| Computes what a Postgres write would do.         | Knows who requested the write and which environment it targets.      |
+| Produces the row-level proposal and warnings.    | Runs policy and presents the approval.                               |
+| Pins the apply to the previewed rows and values. | Routes the approved operation and records the audit trail.           |
+| Works with a connection or driver you provide.   | Keeps production credentials in a runner inside your infrastructure. |
+
+Use `pg-dry-run` on its own when you already have the surrounding workflow. Use
+Polycore when you also need identity, policy, human approval, environment
+routing, credential isolation, and one audit trail across your agents and
+production tools.
+
+## Safety model
+
+### Refuse instead of guessing
+
+A wrong preview is more dangerous than no preview. `pg-dry-run` throws
+`UnsupportedStatementError` when it cannot derive an equivalent read.
+
+It currently refuses:
+
+- anything other than one `INSERT`, `UPDATE`, or `DELETE`, including DDL and
+  data-modifying CTEs;
+- an update or delete without a `WHERE` clause;
+- `UPDATE ... FROM`, `DELETE ... USING`, or a statement with a `WITH` clause;
+- assignment to an array element or object subfield;
+- `INSERT ... SELECT`;
+- either form of `ON CONFLICT`;
+- writes to a generated column or a `GENERATED ALWAYS AS IDENTITY` column;
+- an update or delete against a table without a primary key;
+- a proposal above `maxRows`, which defaults to 1,000.
+
+The original predicate is copied, not interpreted. Any predicate Postgres can
+parse is supported as long as the surrounding statement shape is supported.
+
+### Use a separate read connection when possible
+
+One connection string is enough:
 
 ```ts
-const p = await pg.propose("INSERT INTO accounts (email) VALUES ($1)", [
-  "new@acme.com",
-]);
-
-p.changes[0].fields;
-// email      -> new@acme.com
-// role       -> admin          <- the column default, not in the statement
-// status     -> active
-// created_at -> 2026-08-29 14:31:07+00
+const pg = createDryRunner({
+  url: process.env.DATABASE_URL,
+});
 ```
 
-Every value is evaluated during the read-only preview and written back exactly
-as shown, defaults included. The exception is a key drawn from a sequence:
-`nextval()` is a write, so it cannot run in the preview. Those columns are left
-out of the diff, named in a `deferred_default` warning, and reported on the
-receipt after the apply:
+The library generates the preview query itself, refuses statement shapes it
+does not understand, and runs the preview in a read-only transaction.
 
-```ts
-const receipt = await pg.apply(p);
-receipt.keys; // [{ id: "4821" }]
-```
-
-### 3. Ask the catalog what a rewrite cannot see
-
-Triggers, rewrite rules,
-generated columns, unique columns, and every foreign key pointing at the target.
-For a delete this is the important part, because a rewritten read selects from
-one table while `ON DELETE CASCADE` reaches many:
-
-```ts
-const p = await pg.propose("DELETE FROM workspaces WHERE id = $1", ["ws_881"]);
-
-p.rowCount; // 1
-p.cascades;
-// profiles          depth 0   5 rows   cascade
-// sessions          depth 1  15 rows   cascade
-// api_keys          depth 1   1 row    cascade
-// invoices          depth 0   1 row    restrict   <- this delete will fail
-```
-
-### 4. Pin the apply to what was shown
-
-Every row carries its `xmin`, the
-transaction id that last wrote that row version. The apply re-runs the mutation
-matched on those versions, in one transaction:
-
-```ts
-try {
-  const receipt = await pg.apply(proposal);
-  receipt.rowsAffected; // 14
-} catch (error) {
-  if (error instanceof StateChangedError) {
-    error.drifted;
-    // [{ key: { id: "c04d…" }, reason: "modified", currentVersion: "90418" }]
-  }
-}
-```
-
-Two properties follow from the mechanism rather than from a rule:
-
-- **It fails safe.** A row cannot change without its `xmin` changing. A drifted
-  row aborts the entire apply, so nothing partial lands.
-- **The approved set cannot grow.** Because the apply names primary keys, a row
-  that starts matching the predicate while the approval is pending is not
-  eligible. You approved fourteen rows; exactly those fourteen can change.
-
-## Bring your own approval flow
-
-pg-dry-run produces the artifact you approve. It does not own the workflow, the
-identity, or the transport:
-
-```ts
-const proposal = await pg.propose(sql, params);
-if (await yourApprovalFlow(proposal)) await pg.apply(proposal);
-```
-
-A `Proposal` is plain JSON with no methods, so it survives a trip through a
-queue, a database row, or a Slack round trip and applies in a different process.
-
-That boundary is deliberate, but it is worth being explicit about what sits on
-your side of it. Running this against a production database with an agent
-attached also means:
-
-- **Someone other than the caller approves.** A second approver needs an
-  identity the caller cannot assume.
-- **The approval leaves the terminal.** The people who should sign off on a
-  production write are not tailing your process output.
-- **The log is not written by the thing being audited.** An audit trail the
-  caller appends to is not an audit trail.
-- **Environments route differently.** Staging should not have to clear the bar
-  production does.
-- **The connection string is not on a laptop.** A credential should not be held
-  by the process asking to use it.
-
-None of those are Postgres problems, so none of them are in this library.
-
-[Polycore](https://polycore.ai) is where we build them: governed production
-access for agents and humans, with the approval, the identity, and the audit log
-around it, and credentials that stay inside your own infrastructure. pg-dry-run
-is the piece that answers what a write would actually do, and it is open source
-because that question is worth answering whether or not you use the rest.
-
-## One connection string is enough
-
-`url` alone is fine. The derived read is generated by this library, never by a
-caller or a model, and the statement is refused unless the rewriter fully
-understands it, so the rewriter cannot emit a write. Previews additionally run
-inside `BEGIN TRANSACTION READ ONLY`, which is what stops a predicate that calls
-a volatile `SECURITY DEFINER` function from writing.
-
-A `SELECT`-only role is still the stronger guarantee, because then
-write-incapability is enforced by PostgreSQL privileges rather than by this
-library being correct. It is an upgrade, never a requirement:
+A separate `SELECT`-only role is still the stronger setup because Postgres
+permissions, rather than library correctness, enforce read-only access:
 
 ```ts
 const pg = createDryRunner({
@@ -246,61 +269,31 @@ const pg = createDryRunner({
 });
 ```
 
-## What it refuses
-
-A wrong diff is worse than no diff, because it manufactures confidence. Anything
-the rewriter cannot transform faithfully throws `UnsupportedStatementError`
-rather than producing an approximation:
-
-- anything that is not a single `INSERT`, `UPDATE` or `DELETE`, including
-  data-modifying CTEs and DDL;
-- a missing `WHERE` clause on an update or delete;
-- `UPDATE ... FROM`, `DELETE ... USING`, and statements with a `WITH` clause;
-- assignment to a subfield or array element;
-- `INSERT ... SELECT`, whose rows come from a query rather than the statement;
-- `ON CONFLICT` in either form, since what a conflict does to an existing row is
-  not visible until the insert runs;
-- writing a generated or `GENERATED ALWAYS AS IDENTITY` column;
-- a table with no primary key for an update or delete, since its rows could not
-  be pinned. An insert is fine without one: there is no existing row to pin.
-
-It also refuses to name more rows than `maxRows` (default 1000):
-
-```
-TooManyRowsError: Statement matches 41219 rows, above the enumeration limit of
-1000. An approval must name its rows; a change this size belongs in a reviewed
-migration.
-```
-
-That limit is a design position. An approval that does not name its rows was not
-really an approval, and past a few hundred rows the change is not a decision a
-human can review.
-
 ## Limitations
 
-Stated here rather than discovered later:
+The proposal reports hazards it can detect but cannot preview:
 
-- **Triggers.** A `BEFORE` trigger can change the values actually written, and
-  any trigger can write elsewhere. Reported as a warning, never invisible.
-- **Constraints.** A preview cannot prove the apply will not violate a unique or
-  check constraint. Assignments touching a unique column are flagged.
-- **Volatile expressions.** `SET token = gen_random_uuid()` is evaluated at
-  preview time and the previewed value is what gets written. That is deliberate:
-  you apply exactly what was approved. The same holds for a column default an
-  insert falls through to, so a `created_at DEFAULT now()` carries the moment
-  the preview ran rather than the moment it was approved. Reported as a
-  `default_evaluated` warning.
-- **Cascade reach is followed one column at a time.** A multi-column foreign
-  key needs a tuple match the walk cannot express, so rows reachable through one
-  are named in a `composite_foreign_key_skipped` warning rather than counted.
-  The same goes for anything past `cascadeDepth`, which reports
-  `cascade_depth_truncated`. A truncated count is never presented as a complete
-  one.
-- **`xmin` and `VACUUM FREEZE`.** Freezing rewrites `xmin` without changing
-  data, which would reject a valid apply. Wrong in the harmless direction, and
-  irrelevant at proposal lifetimes.
-- **Postgres only.** The rewrite would port to any transactional database; the
-  drift guard would not, because `xmin` is Postgres-specific.
+- **Triggers and rewrite rules.** A `BEFORE` trigger can change the values being
+  written, and any trigger or rule can write elsewhere. The proposal includes a
+  warning when these exist.
+- **Constraints.** A preview cannot guarantee that the apply will satisfy every
+  unique or check constraint. Assignments to unique columns are flagged.
+- **Volatile expressions.** Expressions such as `gen_random_uuid()` and
+  `now()` are evaluated during preview. The resolved value is what apply writes.
+  An insert that evaluates a column default reports a `default_evaluated`
+  warning.
+- **Sequence defaults.** `nextval()` cannot run in a read-only preview. The
+  affected columns are reported in a `deferred_default` warning, and generated
+  keys appear on the receipt.
+- **Composite foreign keys.** Cascade discovery follows one column at a time.
+  A composite key is reported as `composite_foreign_key_skipped` rather than
+  presented as a complete count.
+- **Cascade depth.** Traversal stops at `cascadeDepth`, which defaults to five.
+  A truncated walk is reported as `cascade_depth_truncated`.
+- **`xmin` and `VACUUM FREEZE`.** Freezing can change `xmin` without changing
+  row data. That can reject a valid apply, but it cannot allow a stale one.
+- **Postgres only.** The rewrite could be adapted to other transactional
+  databases, but row-version pinning currently depends on Postgres.
 
 ## API
 
@@ -314,34 +307,47 @@ interface DryRunner {
 }
 ```
 
-Options: `url`, `readUrl`, `driver`, `readDriver`, `maxRows` (1000), `ttlMs`
-(5 min), `statementTimeoutMs` (10s), `labelColumns`, `cascadeDepth` (5), `now`.
+| Option                  | Default                       | Purpose                                              |
+| ----------------------- | ----------------------------- | ---------------------------------------------------- |
+| `url`                   | —                             | Connection string used for previews and applies.     |
+| `readUrl`               | `url`                         | Optional `SELECT`-only connection used for previews. |
+| `driver` / `readDriver` | —                             | Supply your own connection or pool implementation.   |
+| `maxRows`               | `1000`                        | Maximum rows one proposal may name.                  |
+| `ttlMs`                 | `5 minutes`                   | How long a proposal remains applicable.              |
+| `statementTimeoutMs`    | `10 seconds`                  | Per-statement timeout for previews and applies.      |
+| `labelColumns`          | common human-readable columns | Preferred columns for row labels.                    |
+| `cascadeDepth`          | `5`                           | How far to follow `ON DELETE CASCADE`.               |
 
-The method is `propose` rather than `dryRun` because what comes back is a
-`Proposal`: a thing to be approved, not just a run that did nothing. `apply`
-takes it from there.
+A `Proposal` carries `rowCount`, `changes`, `cascades`, `warnings`,
+`derivedSql`, `columns`, creation and expiry times, and the internal apply plan.
 
-A `Proposal` carries `rowCount`, the per-row `changes`, the `cascades` a delete
-would reach, any `warnings`, the `derivedSql` that produced it, and `columns`,
-the columns the statement would write. It also carries a `plan`, which exists so
-`apply` can rebuild the statement in another process; `columns` is the field to
-render.
+A `Receipt` carries `rowsAffected`, `appliedAt`, and the primary keys touched by
+the apply. For an insert, this is where database-generated keys are reported.
 
-A `Receipt` carries `rowsAffected` and `keys`, the primary keys of the rows the
-apply touched. For an insert those are the only way to learn a key the database
-generated.
+Errors extend `PgDryRunError`:
 
-Errors: `UnsupportedStatementError`, `TooManyRowsError`, `ProposalExpiredError`,
-`StateChangedError`, all extending `PgDryRunError`.
+- `UnsupportedStatementError`
+- `TooManyRowsError`
+- `ProposalExpiredError`
+- `StateChangedError`
 
-Bring your own connection by implementing `Driver`, which needs one thing:
-exclusive use of a session, so a transaction's statements share a connection.
+Implement `Driver` to bring your own pool or use a non-server Postgres. A driver
+only needs to provide exclusive use of one session so every statement in a
+transaction shares the same connection.
 
 ## Contributing
 
-`pnpm install && pnpm verify` is the whole loop. Tests run against real
-PostgreSQL semantics in-process via PGlite, so there is no server or container
-to set up. See [CONTRIBUTING.md](CONTRIBUTING.md).
+```sh
+pnpm install
+pnpm verify
+```
+
+Tests run against PostgreSQL semantics in-process through
+[PGlite](https://pglite.dev), so the normal development loop needs no server or
+container. See [CONTRIBUTING.md](CONTRIBUTING.md) for the test matrix and
+project conventions.
+
+Security issues should be reported privately. See [SECURITY.md](SECURITY.md).
 
 ## License
 
@@ -350,6 +356,6 @@ MIT. See [LICENSE](LICENSE).
 ---
 
 <p align="center">
-  Built and maintained by <a href="https://polycore.ai">Polycore</a> — governed
-  production access for agents and humans.
+  Built by <a href="https://polycore.ai">Polycore</a> for governed production
+  access from AI agents and human operators.
 </p>
