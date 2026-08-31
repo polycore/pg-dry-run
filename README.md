@@ -28,9 +28,9 @@
 
 ## Why this exists
 
-AI agents are becoming good enough to inspect schemas, generate SQL, and operate
-real applications. Giving an agent read access to Postgres is useful and can be
-contained with a read-only role. Giving it write access is a different problem.
+AI agents increasingly inspect schemas, generate SQL, and operate real
+applications. Read access can be contained with a read-only role. Writes need a
+way to inspect the effect before production data changes.
 
 An agent can generate a perfectly valid statement that does something nobody
 intended:
@@ -39,30 +39,25 @@ intended:
 UPDATE profiles SET status = 'suspended' WHERE email LIKE '%@acme.com';
 ```
 
-The SQL looks reasonable. The production data decides whether it updates one
-account or fourteen, including a service account nobody remembered. An insert
-can pick up a dangerous column default that never appears in the statement. A
-delete can reach other tables through foreign keys.
-
-Static SQL checks cannot answer those questions because the answers are not in
-the query text. Asking a person to approve the SQL has the same limitation: they
-see the instruction, not its effect on the current database.
+The SQL looks reasonable, but production data decides whether it updates one
+account or fourteen. Inserts can pick up defaults that never appear in the
+statement, and deletes can reach other tables through foreign keys. Static
+checks and human review both see the query text, not its effect on the current
+database.
 
 > The useful safety question is not “Does this SQL look reasonable?” It is
 > “Which rows will change, how will they change, and what else will be affected?”
 
-`pg-dry-run` adds that missing preview step. It evaluates a write as a read,
-returns a plain JSON proposal with the rows and changes, and later applies only
-what was previewed. If any existing row changed while the proposal was waiting,
-the entire apply is rejected.
+`pg-dry-run` evaluates a write as a read and returns a plain JSON proposal with
+the affected rows and changes. It later applies only what was previewed; if an
+existing row changed in the meantime, the entire apply is rejected.
 
 <p align="center">
   <code>agent-generated SQL → read-only preview → policy or approval → guarded apply</code>
 </p>
 
-The library does not run an AI model and does not prescribe an approval UI. It
-takes SQL and bound parameters, then provides the database mechanism an agent,
-CLI, admin tool, or approval system can build on.
+It does not run an AI model or prescribe an approval UI. It provides the
+database mechanism an agent, CLI, admin tool, or approval system can build on.
 
 ## Quick start
 
@@ -190,38 +185,15 @@ An insert is pinned to the values resolved during preview. For example, a
 
 ## How Polycore uses pg-dry-run
 
-`pg-dry-run` is the effect engine behind Polycore's Postgres write path.
-[Polycore](https://polycore.ai) gives AI agents and people governed access to
-production systems without handing them production credentials.
+`pg-dry-run` is the effect engine behind [Polycore's](https://polycore.ai)
+Postgres write path. A Polycore runner previews agent-generated SQL beside the
+database, feeds the resulting effect into policy and human approval, then
+applies the held proposal once the write is cleared. Database credentials stay
+inside the customer's infrastructure.
 
-For a one-off Postgres write, the flow is:
-
-1. An agent generates a parameterized `INSERT`, `UPDATE`, or `DELETE` and calls
-   a Polycore Postgres capability.
-2. A Polycore runner inside the customer's infrastructure calls
-   `pg-dry-run.propose()` next to the database. The database credential remains
-   in that infrastructure.
-3. Polycore turns the proposal into an effect that policy can evaluate: target
-   table, operation, row count, written columns, cascade reach, and warnings. A
-   capped row-level diff is available to the human reviewer.
-4. Policy can reject the write, allow it, or hold it for approval. The caller,
-   environment, request, effect, and decision are recorded together.
-5. Once the write is cleared, the runner calls `apply()` with the held proposal.
-   The row-version check still protects the gap between preview and execution.
-
-This separation is intentional:
-
-| `pg-dry-run`                                     | Polycore                                                             |
-| ------------------------------------------------ | -------------------------------------------------------------------- |
-| Computes what a Postgres write would do.         | Knows who requested the write and which environment it targets.      |
-| Produces the row-level proposal and warnings.    | Runs policy and presents the approval.                               |
-| Pins the apply to the previewed rows and values. | Routes the approved operation and records the audit trail.           |
-| Works with a connection or driver you provide.   | Keeps production credentials in a runner inside your infrastructure. |
-
-Use `pg-dry-run` on its own when you already have the surrounding workflow. Use
-Polycore when you also need identity, policy, human approval, environment
-routing, credential isolation, and one audit trail across your agents and
-production tools.
+The library handles the Postgres-specific preview and guarded apply. Polycore
+provides the surrounding identity, policy, approval, environment routing, and
+audit trail.
 
 ## Safety model
 
