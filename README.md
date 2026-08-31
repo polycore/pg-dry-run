@@ -186,7 +186,7 @@ An insert is pinned to the values resolved during preview. For example, a
 ## How Polycore uses pg-dry-run
 
 `pg-dry-run` is the effect engine behind
-[Polycore's Postgres write path](https://docs.polycore.ai/integrations/pg-dry-run).
+[Polycore's Postgres write path](https://docs.polycore.ai/pg-dry-run).
 A Polycore runner previews agent-generated SQL beside the database, feeds the
 resulting effect into policy and human approval, then applies the held proposal
 once the write is cleared. Database credentials stay inside the customer's
