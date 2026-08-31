@@ -1,5 +1,11 @@
 # pg-dry-run
 
+## 0.1.2
+
+### Patch Changes
+
+- [#6](https://github.com/polycore/pg-dry-run/pull/6) [`e699866`](https://github.com/polycore/pg-dry-run/commit/e6998668a9515a34195c554eb4d47d0e9d34dd25) Thanks [@kafkas](https://github.com/kafkas)! - Improve the npm package page with the new pg-dry-run identity, clearer guidance for agent-generated Postgres writes, and a link to Polycore's write-path documentation.
+
 ## 0.1.1
 
 ### Patch Changes
